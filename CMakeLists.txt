@@ -52,6 +52,7 @@ set(PROJECT_SOURCES
     src/core/StreamResolver.cpp
     src/core/VlcPlayer.h
     src/core/VlcPlayer.cpp
+    src/core/PlaylistEntry.h
     src/core/PlaylistManager.h
     src/core/PlaylistManager.cpp
     src/ui/ClickableSlider.h

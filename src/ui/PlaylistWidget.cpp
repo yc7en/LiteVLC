@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QFileInfo>
 #include <QFont>
+#include <QColor>
 
 PlaylistWidget::PlaylistWidget(QWidget *parent)
     : QWidget(parent)
@@ -35,6 +36,8 @@ PlaylistWidget::PlaylistWidget(QWidget *parent)
     m_listWidget = new QListWidget(this);
     m_listWidget->setAlternatingRowColors(true);
     m_listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_listWidget->setWordWrap(false);
+    m_listWidget->setTextElideMode(Qt::ElideMiddle);
 
     // 底部操作按钮行
     auto *btnLayout = new QHBoxLayout();
@@ -76,17 +79,33 @@ PlaylistWidget::PlaylistWidget(QWidget *parent)
     });
 }
 
-void PlaylistWidget::updateList(const QStringList &files, int currentIndex)
+void PlaylistWidget::updateList(const QList<PlaylistEntry> &entries, int currentIndex)
 {
     m_listWidget->clear();
-    for (int i = 0; i < files.size(); ++i) {
-        const QFileInfo fi(files.at(i));
+    for (int i = 0; i < entries.size(); ++i) {
+        const PlaylistEntry &entry = entries.at(i);
+
+        QString name = entry.title;
+        if (name.isEmpty()) {
+            name = entry.isOnline() ? entry.location : QFileInfo(entry.location).fileName();
+        }
         const QString display = QStringLiteral("%1. %2")
             .arg(i + 1, 2, 10, QLatin1Char('0'))
-            .arg(fi.fileName());
+            .arg(name);
 
         auto *item = new QListWidgetItem(display, m_listWidget);
-        item->setToolTip(fi.absoluteFilePath());
+
+        if (entry.isOnline()) {
+            // 在线剧集用蓝色标出，和本地文件一眼可分
+            item->setForeground(QColor(QStringLiteral("#8AB4F8")));
+            QString tip = entry.location;
+            if (!entry.subtitle.isEmpty()) {
+                tip = QStringLiteral("来源：%1\n%2").arg(entry.subtitle, entry.location);
+            }
+            item->setToolTip(tip);
+        } else {
+            item->setToolTip(QFileInfo(entry.location).absoluteFilePath());
+        }
     }
     setCurrentIndex(currentIndex);
 }

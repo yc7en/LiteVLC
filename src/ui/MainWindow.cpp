@@ -117,20 +117,10 @@ void MainWindow::setupMenuBar()
     playMenu->addAction(QStringLiteral("快进 5 秒 (Right)"), this, [this]() { m_player->seekRelative(5000); });
     playMenu->addSeparator();
     playMenu->addAction(QStringLiteral("上一集 (PgUp)"), this, [this]() {
-        if (hasOnlineQueue()) {
-            playPrevOnlineEpisode();
-            return;
-        }
-        const QString prev = m_playlist->previousFileManual();
-        if (!prev.isEmpty()) loadAndPlayFile(prev);
+        playPrevPlaylistEntry();
     });
     playMenu->addAction(QStringLiteral("下一集 (PgDn)"), this, [this]() {
-        if (hasOnlineQueue()) {
-            playNextOnlineEpisode();
-            return;
-        }
-        const QString next = m_playlist->nextFileManual();
-        if (!next.isEmpty()) loadAndPlayFile(next);
+        playNextPlaylistEntry();
     });
 
     // 3. 音轨菜单 (绑定到底部按钮与顶部菜单)
@@ -219,10 +209,10 @@ void MainWindow::setupConnections()
 
     // 底部控制栏信号 -> 播放器动作
     connect(m_controlBar, &ControlBar::playPauseClicked, this, [this]() {
-        if (m_player->currentFilePath().isEmpty() && !m_playlist->files().isEmpty()) {
+        if (m_player->currentFilePath().isEmpty() && m_player->currentUrl().isEmpty()
+            && !m_playlist->entries().isEmpty()) {
             int idx = m_playlist->currentIndex() >= 0 ? m_playlist->currentIndex() : 0;
-            m_playlist->setCurrentIndex(idx);
-            loadAndPlayFile(m_playlist->currentFile());
+            playPlaylistIndex(idx);
             return;
         }
         m_player->togglePlayPause();
@@ -232,20 +222,10 @@ void MainWindow::setupConnections()
         m_player->stop();
     });
     connect(m_controlBar, &ControlBar::prevClicked, this, [this]() {
-        if (hasOnlineQueue()) {
-            playPrevOnlineEpisode();
-            return;
-        }
-        const QString prev = m_playlist->previousFileManual();
-        if (!prev.isEmpty()) loadAndPlayFile(prev);
+        playPrevPlaylistEntry();
     });
     connect(m_controlBar, &ControlBar::nextClicked, this, [this]() {
-        if (hasOnlineQueue()) {
-            playNextOnlineEpisode();
-            return;
-        }
-        const QString next = m_playlist->nextFileManual();
-        if (!next.isEmpty()) loadAndPlayFile(next);
+        playNextPlaylistEntry();
     });
     connect(m_controlBar, &ControlBar::seekRequested, m_player, &VlcPlayer::seekTime);
     connect(m_controlBar, &ControlBar::volumeChanged, this, [this](int vol) {
@@ -272,13 +252,12 @@ void MainWindow::setupConnections()
 
     // 播放列表信号 -> PlaylistManager & 播放控制
     connect(m_playlist, &PlaylistManager::playlistChanged, this, [this]() {
-        m_playlistWidget->updateList(m_playlist->files(), m_playlist->currentIndex());
+        m_playlistWidget->updateList(m_playlist->entries(), m_playlist->currentIndex());
     });
     connect(m_playlist, &PlaylistManager::currentIndexChanged, m_playlistWidget, &PlaylistWidget::setCurrentIndex);
 
     connect(m_playlistWidget, &PlaylistWidget::itemDoubleClicked, this, [this](int index) {
-        m_playlist->setCurrentIndex(index);
-        loadAndPlayFile(m_playlist->currentFile());
+        playPlaylistIndex(index);
     });
     connect(m_playlistWidget, &PlaylistWidget::addFilesRequested, this, &MainWindow::onOpenFiles);
     connect(m_playlistWidget, &PlaylistWidget::removeIndexRequested, m_playlist, &PlaylistManager::removeAt);
@@ -298,7 +277,8 @@ void MainWindow::loadAndPlayFile(const QString &filePath)
     saveCurrentProgress();
 
     // 打开本地文件即退出在线连播模式
-    clearOnlineQueue();
+    // 打开本地文件即退出在线解析链（播放列表索引保持不变，仍由用户双击驱动）
+    stopOnlineResolve();
 
     m_initialSeekApplied = false;
     m_outroSkipTriggered = false;
@@ -318,8 +298,7 @@ void MainWindow::addAndPlayFiles(const QStringList &filePaths)
     }
     int firstIdx = m_playlist->addFiles(filePaths);
     if (firstIdx >= 0) {
-        m_playlist->setCurrentIndex(firstIdx);
-        loadAndPlayFile(m_playlist->currentFile());
+        playPlaylistIndex(firstIdx);
     }
 }
 
@@ -331,20 +310,104 @@ void MainWindow::onOpenOnlineSearch()
 {
     if (!m_sourceDialog) {
         m_sourceDialog = new SourceDialog(this);
-        connect(m_sourceDialog, &SourceDialog::playRequested, this, &MainWindow::onOnlinePlayRequested);
+        connect(m_sourceDialog, &SourceDialog::playEntriesRequested,
+                this, &MainWindow::onPlayEntriesRequested);
+        connect(m_sourceDialog, &SourceDialog::addEntriesRequested,
+                this, &MainWindow::onAddEntriesRequested);
     }
+
+    // 非模态：搜索窗开着的时候主窗口照样能暂停、拖进度、切集
+    m_sourceDialog->show();
+    m_sourceDialog->raise();
+    m_sourceDialog->activateWindow();
     m_sourceDialog->focusSearchInput();
-    m_sourceDialog->exec();
 }
 
-void MainWindow::onOnlinePlayRequested(const OnlinePlayRequest &request)
+void MainWindow::onPlayEntriesRequested(const QList<PlaylistEntry> &entries, int startIndex)
 {
-    if (!request.isValid()) {
+    if (entries.isEmpty()) {
         return;
     }
-    m_onlineRequest = request;
-    m_manualPlayAttempt = true;
-    playOnlineEpisode(request.startIndex);
+
+    int target = m_playlist->addEntries(entries);
+    if (target < 0) {
+        m_videoWidget->showOsdMessage(QStringLiteral("加入播放列表失败"), 4000);
+        return;
+    }
+
+    // addEntries 返回的是「首个新增或已存在」的下标，这里按地址精确定位要播的那一集
+    if (startIndex >= 0 && startIndex < entries.size()) {
+        const int found = m_playlist->indexOf(entries.at(startIndex).location);
+        if (found >= 0) {
+            target = found;
+        }
+    }
+
+    m_playlistWidget->setVisible(true);
+    playPlaylistIndex(target);
+}
+
+void MainWindow::onAddEntriesRequested(const QList<PlaylistEntry> &entries)
+{
+    if (entries.isEmpty()) {
+        return;
+    }
+    if (m_playlist->addEntries(entries) < 0) {
+        m_videoWidget->showOsdMessage(QStringLiteral("加入播放列表失败"), 4000);
+        return;
+    }
+
+    m_playlistWidget->setVisible(true);
+    m_videoWidget->showOsdMessage(
+        QStringLiteral("＋ 已加入播放列表：%1 集（重复的自动跳过）").arg(entries.size()), 4000);
+}
+
+void MainWindow::resetAutoAdvanceGuard()
+{
+    m_autoAdvanceCount = 0;
+    m_autoAdvanceWindow.invalidate();
+}
+
+void MainWindow::playPlaylistIndex(int index, bool autoAdvance)
+{
+    const PlaylistEntry entry = m_playlist->entryAt(index);
+    if (!entry.isValid()) {
+        return;
+    }
+
+    if (!autoAdvance) {
+        resetAutoAdvanceGuard();
+    }
+
+    m_playlist->setCurrentIndex(index);
+
+    if (entry.isOnline()) {
+        playOnlineEntry(index);
+    } else {
+        loadAndPlayFile(entry.location);
+    }
+}
+
+void MainWindow::playNextPlaylistEntry()
+{
+    if (m_playlist->entries().isEmpty()) {
+        return;
+    }
+    const PlaylistEntry next = m_playlist->nextEntryManual();
+    if (next.isValid()) {
+        playPlaylistIndex(m_playlist->currentIndex());
+    }
+}
+
+void MainWindow::playPrevPlaylistEntry()
+{
+    if (m_playlist->entries().isEmpty()) {
+        return;
+    }
+    const PlaylistEntry prev = m_playlist->previousEntryManual();
+    if (prev.isValid()) {
+        playPlaylistIndex(m_playlist->currentIndex());
+    }
 }
 
 static QString failureCategoryText(const ResolveFailure &failure)
@@ -369,44 +432,64 @@ static QString failureCategoryText(const ResolveFailure &failure)
     }
 }
 
-void MainWindow::playOnlineEpisode(int index)
+void MainWindow::ensureResolver()
 {
-    if (index < 0 || index >= m_onlineRequest.episodes.size()) {
+    if (m_resolver) {
+        return;
+    }
+    m_resolver = new StreamResolver(this);
+    connect(m_resolver, &StreamResolver::resolved, this, &MainWindow::onStreamResolved);
+    connect(m_resolver, &StreamResolver::failed, this, &MainWindow::onStreamResolveFailed);
+    connect(m_resolver, &StreamResolver::progress, this, [this](const QString &text) {
+        m_videoWidget->showOsdMessage(text, 7000);
+    });
+}
+
+void MainWindow::stopOnlineResolve()
+{
+    if (m_resolver) {
+        m_resolver->cancel();
+    }
+    m_resolvingIndex = -1;
+    m_playRetryCount = 0;
+    m_lastStream = ResolvedStream();
+    m_lastStreamHasHeaders = false;
+}
+
+void MainWindow::playOnlineEntry(int index)
+{
+    const PlaylistEntry entry = m_playlist->entryAt(index);
+    if (!entry.isOnline()) {
         return;
     }
 
-    m_onlineRequest.startIndex = index;
+    // 切换视频前先保存上一个视频的观看进度
+    saveCurrentProgress();
+
+    m_resolvingIndex = index;
     m_initialSeekApplied = false;
     m_outroSkipTriggered = false;
     m_playRetryCount = 0;
+    m_manualPlayAttempt = true;
 
-    const VodEpisode episode = m_onlineRequest.episodes.at(index);
-
-    if (!m_resolver) {
-        m_resolver = new StreamResolver(this);
-        connect(m_resolver, &StreamResolver::resolved, this, &MainWindow::onStreamResolved);
-        connect(m_resolver, &StreamResolver::failed, this, &MainWindow::onStreamResolveFailed);
-        connect(m_resolver, &StreamResolver::progress, this, [this](const QString &text) {
-            m_videoWidget->showOsdMessage(text, 7000);
-        });
-    }
+    ensureResolver();
     m_resolver->cancel();
 
     // 真实源站很常见的情况是「搜索能通、直链 403 / 是网页 / 链接过期」，
     // 直接丢给 LibVLC 只会黑屏且没有任何提示，所以先走一遍解析链再决定用什么 header 播。
-    m_videoWidget->showOsdMessage(QStringLiteral("正在连接 %1 …").arg(episode.name), 8000);
-    m_resolver->resolve(episode.url, m_onlineRequest.userAgent, m_onlineRequest.referer);
+    m_videoWidget->showOsdMessage(QStringLiteral("正在连接 %1 …").arg(entry.title), 8000);
+    m_resolver->resolve(entry.location, entry.userAgent, entry.referer);
 }
 
 void MainWindow::onStreamResolved(const ResolvedStream &stream)
 {
-    if (!hasOnlineQueue()) {
+    if (m_resolvingIndex < 0) {
+        return;   // 用户已经切去播别的了
+    }
+    const PlaylistEntry entry = m_playlist->entryAt(m_resolvingIndex);
+    if (!entry.isOnline()) {
         return;
     }
-
-    const VodEpisode episode = m_onlineRequest.episodes.at(m_onlineRequest.startIndex);
-
-    saveCurrentProgress();  // 本地文件切走前先存进度（网络流内部直接跳过）
 
     m_lastStream = stream;
     m_lastStreamHasHeaders = true;
@@ -416,11 +499,11 @@ void MainWindow::onStreamResolved(const ResolvedStream &stream)
     if (!m_player->openUrl(stream.url, stream.userAgent, stream.referer,
                            cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
         m_videoWidget->showOsdMessage(
-            QStringLiteral("无法播放该地址：%1").arg(episode.name), 5000);
+            QStringLiteral("无法播放该地址：%1").arg(entry.title), 5000);
         return;
     }
 
-    setWindowTitle(QStringLiteral("%1 · %2 - LiteVLC Player").arg(m_onlineRequest.title, episode.name));
+    setWindowTitle(QStringLiteral("%1 - LiteVLC Player").arg(entry.title));
     m_player->setVolume(cfg.volume());
 
     QString via;
@@ -430,21 +513,23 @@ void MainWindow::onStreamResolved(const ResolvedStream &stream)
         via = QStringLiteral(" · 已从内嵌页解析");
     }
     m_videoWidget->showOsdMessage(
-        QStringLiteral("▶ %1  %2  (%3/%4)%5")
-            .arg(m_onlineRequest.title, episode.name)
-            .arg(m_onlineRequest.startIndex + 1)
-            .arg(m_onlineRequest.episodes.size())
+        QStringLiteral("▶ %1  (%2/%3)%4")
+            .arg(entry.title)
+            .arg(m_resolvingIndex + 1)
+            .arg(m_playlist->entries().size())
             .arg(via),
         3000);
 }
 
 void MainWindow::onStreamResolveFailed(const ResolveFailure &failure)
 {
-    if (!hasOnlineQueue() || failure.kind == ResolveFailureKind::Canceled) {
+    if (m_resolvingIndex < 0 || failure.kind == ResolveFailureKind::Canceled) {
         return;
     }
-
-    const VodEpisode episode = m_onlineRequest.episodes.at(m_onlineRequest.startIndex);
+    const PlaylistEntry entry = m_playlist->entryAt(m_resolvingIndex);
+    if (!entry.isOnline()) {
+        return;
+    }
 
     // Qt 与 LibVLC 用的不是同一套 TLS 实现（Qt 走 Schannel，VLC 走 GnuTLS），
     // 预检挂在证书/超时上并不代表内核也播不了，这种情况直接交给内核试一次。
@@ -452,10 +537,9 @@ void MainWindow::onStreamResolveFailed(const ResolveFailure &failure)
         || failure.kind == ResolveFailureKind::TlsFailed) {
         auto &cfgTls = ConfigManager::instance();
         m_lastStreamHasHeaders = false;
-        if (m_player->openUrl(episode.url, m_onlineRequest.userAgent, m_onlineRequest.referer,
+        if (m_player->openUrl(entry.location, entry.userAgent, entry.referer,
                               cfgTls.hwAccelEnabled(), cfgTls.hwAccelBackend())) {
-            setWindowTitle(QStringLiteral("%1 · %2 - LiteVLC Player")
-                               .arg(m_onlineRequest.title, episode.name));
+            setWindowTitle(QStringLiteral("%1 - LiteVLC Player").arg(entry.title));
             m_videoWidget->showOsdMessage(
                 QStringLiteral("预检未通过（%1），已交给播放内核直连").arg(failure.userMessage), 4000);
             return;
@@ -466,19 +550,19 @@ void MainWindow::onStreamResolveFailed(const ResolveFailure &failure)
         QStringLiteral("播放失败：%1").arg(failure.userMessage), 8000);
     if (m_manualPlayAttempt) {
         m_manualPlayAttempt = false;
-        showPlaybackFailure(failure, episode);
+        showResolveFailureDialog(failure, entry);
     }
 }
 
-void MainWindow::showPlaybackFailure(const ResolveFailure &failure, const VodEpisode &episode)
+void MainWindow::showResolveFailureDialog(const ResolveFailure &failure, const PlaylistEntry &entry)
 {
     QStringList lines;
     lines << failure.userMessage;
     lines << QString();
     lines << QStringLiteral("分类：%1 · %2").arg(failure.category, failureCategoryText(failure));
     lines << QString();
-    lines << QStringLiteral("剧集：%1").arg(episode.name);
-    lines << QStringLiteral("地址：%1").arg(episode.url);
+    lines << QStringLiteral("剧集：%1").arg(entry.title);
+    lines << QStringLiteral("地址：%1").arg(entry.location);
 
     if (failure.statusCode > 0) {
         lines << QStringLiteral("状态码：HTTP %1").arg(failure.statusCode);
@@ -532,16 +616,18 @@ void MainWindow::showPlaybackFailure(const ResolveFailure &failure, const VodEpi
 
 void MainWindow::onPlayerError(const QString &message)
 {
+    const PlaylistEntry entry = m_playlist->entryAt(m_resolvingIndex);
+
     // 预检只看主播放列表，分片/子清单可能被另一套防盗链挡住。
     // 这种情况换个 header 组合重开一次往往就通了，所以先自动重试，再报错。
-    if (m_player->isStreaming() && hasOnlineQueue() && m_playRetryCount < 2) {
+    if (m_player->isStreaming() && m_resolvingIndex >= 0 && entry.isOnline() && m_playRetryCount < 2) {
         ++m_playRetryCount;
 
-        QString ua = m_lastStreamHasHeaders ? m_lastStream.userAgent : m_onlineRequest.userAgent;
-        QString referer = m_lastStreamHasHeaders ? m_lastStream.referer : m_onlineRequest.referer;
+        QString ua = m_lastStreamHasHeaders ? m_lastStream.userAgent : entry.userAgent;
+        QString referer = m_lastStreamHasHeaders ? m_lastStream.referer : entry.referer;
         const QString target = m_lastStreamHasHeaders && !m_lastStream.url.isEmpty()
                                    ? m_lastStream.url
-                                   : m_onlineRequest.episodes.at(m_onlineRequest.startIndex).url;
+                                   : entry.location;
         if (m_playRetryCount == 1) {
             referer.clear();          // 常见：Referer 反而触发 403
         } else {
@@ -564,38 +650,6 @@ void MainWindow::onPlayerError(const QString &message)
                              QStringLiteral("%1\n\n当前地址：%2")
                                  .arg(message, m_player->currentUrl()));
     }
-}
-
-void MainWindow::playNextOnlineEpisode()
-{
-    if (!hasOnlineQueue()) {
-        return;
-    }
-    if (m_onlineRequest.startIndex + 1 >= m_onlineRequest.episodes.size()) {
-        m_videoWidget->showOsdMessage(QStringLiteral("已经是最后一集了"));
-        return;
-    }
-    playOnlineEpisode(m_onlineRequest.startIndex + 1);
-}
-
-void MainWindow::playPrevOnlineEpisode()
-{
-    if (!hasOnlineQueue()) {
-        return;
-    }
-    if (m_onlineRequest.startIndex <= 0) {
-        m_videoWidget->showOsdMessage(QStringLiteral("已经是第一集了"));
-        return;
-    }
-    playOnlineEpisode(m_onlineRequest.startIndex - 1);
-}
-
-void MainWindow::clearOnlineQueue()
-{
-    if (m_resolver) {
-        m_resolver->cancel();
-    }
-    m_onlineRequest = OnlinePlayRequest();
 }
 
 void MainWindow::onDurationChanged(qint64 totalMs)
@@ -666,30 +720,48 @@ void MainWindow::onMediaEndReached()
 {
     auto &cfg = ConfigManager::instance();
 
-    // 在线源：本站点线路还有下一集就直接续播，不走本地播放列表逻辑
-    if (hasOnlineQueue()) {
-        if (m_onlineRequest.startIndex + 1 < m_onlineRequest.episodes.size()) {
-            playOnlineEpisode(m_onlineRequest.startIndex + 1);
-        } else {
-            clearOnlineQueue();
-            m_player->stop();
-            m_controlBar->updateTime(0, m_player->durationMs());
-            m_videoWidget->showOsdMessage(QStringLiteral("这条线路已经播完了"));
-        }
+    // 网络流还没拿到有效时长就「播完了」，基本都是这一集没加载起来
+    // （分片 403、清单为空、线路挂了）。此时继续连播只会把整季瞬间跳完。
+    if (m_player->isStreaming() && m_player->durationMs() <= 0) {
+        m_player->stop();
+        m_controlBar->updateTime(0, m_player->durationMs());
+        m_videoWidget->showOsdMessage(
+            QStringLiteral("这一集没能播放（没拿到有效媒体），已停止连播"), 6000);
         return;
     }
 
-    // 正常播完时移除旧进度记忆
+    // 坏流会「秒结束」，连播就成了疯狂跳集。10 秒内连跳超过 3 次就收手。
+    const bool counting = m_autoAdvanceWindow.isValid()
+                          && m_autoAdvanceWindow.elapsed() <= 10000;
+    if (!counting) {
+        m_autoAdvanceWindow.start();
+        m_autoAdvanceCount = 0;
+    }
+    if (++m_autoAdvanceCount > 3) {
+        resetAutoAdvanceGuard();
+        m_player->stop();
+        m_controlBar->updateTime(0, m_player->durationMs());
+        m_videoWidget->showOsdMessage(
+            QStringLiteral("连续多集都无法正常播放，已停止自动连播（可换一条线路试试）"), 7000);
+        return;
+    }
+
+    // 正常播完时移除旧进度记忆（网络流不写历史）
     if (!m_player->isStreaming()) {
         cfg.savePosition(m_player->currentFilePath(), m_player->durationMs(), m_player->durationMs());
     }
 
-    const QString nextFile = m_playlist->nextFileOnEnd(cfg.playMode());
-    if (!nextFile.isEmpty()) {
-        loadAndPlayFile(nextFile);
-    } else {
-        m_player->stop();
-        m_controlBar->updateTime(0, m_player->durationMs());
+    // 本地文件与在线剧集共用一套续播逻辑：按播放模式取下一条
+    const PlaylistEntry next = m_playlist->nextEntryOnEnd(cfg.playMode());
+    if (next.isValid()) {
+        playPlaylistIndex(m_playlist->currentIndex(), /*autoAdvance=*/true);
+        return;
+    }
+
+    m_player->stop();
+    m_controlBar->updateTime(0, m_player->durationMs());
+    if (!m_playlist->entries().isEmpty()) {
+        m_videoWidget->showOsdMessage(QStringLiteral("播放列表已播完"), 3000);
     }
 }
 
@@ -987,25 +1059,13 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
 
     case Qt::Key_PageUp: {
-        if (hasOnlineQueue()) {
-            playPrevOnlineEpisode();
-            event->accept();
-            return;
-        }
-        const QString prev = m_playlist->previousFileManual();
-        if (!prev.isEmpty()) loadAndPlayFile(prev);
+        playPrevPlaylistEntry();
         event->accept();
         return;
     }
 
     case Qt::Key_PageDown: {
-        if (hasOnlineQueue()) {
-            playNextOnlineEpisode();
-            event->accept();
-            return;
-        }
-        const QString next = m_playlist->nextFileManual();
-        if (!next.isEmpty()) loadAndPlayFile(next);
+        playNextPlaylistEntry();
         event->accept();
         return;
     }

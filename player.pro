@@ -46,6 +46,7 @@ HEADERS += \
     src/core/PageSniffer.h \
     src/core/StreamResolver.h \
     src/core/VlcPlayer.h \
+    src/core/PlaylistEntry.h \
     src/core/PlaylistManager.h \
     src/ui/ClickableSlider.h \
     src/ui/VideoWidget.h \

@@ -9,6 +9,7 @@
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileDialog>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
@@ -21,6 +22,8 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
+#include <QScreen>
+#include <QShowEvent>
 #include <QSplitter>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -45,6 +48,9 @@ SourceDialog::SourceDialog(QWidget *parent)
 {
     setWindowTitle(QStringLiteral("在线片源"));
     resize(980, 680);
+
+    // 非模态：开着它也能操作主窗口（暂停、拖进度、切集），不需要先关窗
+    setWindowModality(Qt::NonModal);
 
     auto *tabs = new QTabWidget(this);
     tabs->addTab(createSearchTab(), QStringLiteral("在线搜索"));
@@ -77,9 +83,58 @@ void SourceDialog::focusSearchInput()
     }
 }
 
+void SourceDialog::showEvent(QShowEvent *event)
+{
+    // 上次关窗时置过这个标志（丢弃在途回调），重新打开要放开，否则搜不出东西
+    m_ignoreResults = false;
+    QDialog::showEvent(event);
+
+    if (!m_positioned) {
+        m_positioned = true;
+        placeBesideParent();
+    }
+}
+
+void SourceDialog::placeBesideParent()
+{
+    QWidget *owner = parentWidget();
+    if (!owner) {
+        return;
+    }
+    QScreen *scr = screen() ? screen() : QGuiApplication::primaryScreen();
+    if (!scr) {
+        return;
+    }
+
+    const QRect avail = scr->availableGeometry();
+    const QRect frame = owner->frameGeometry();
+    const int gap = 8;
+    const int minWidth = 760;
+
+    const int rightSpace = avail.right() - frame.right() - gap;
+    if (rightSpace >= minWidth) {
+        const int w = qMin(width(), rightSpace);
+        resize(w, height());
+        move(frame.right() + gap,
+             qBound(avail.top(), frame.top(), qMax(avail.top(), avail.bottom() - height())));
+        return;
+    }
+
+    const int leftSpace = frame.left() - avail.left() - gap;
+    if (leftSpace >= minWidth) {
+        const int w = qMin(width(), leftSpace);
+        resize(w, height());
+        move(frame.left() - gap - w,
+             qBound(avail.top(), frame.top(), qMax(avail.top(), avail.bottom() - height())));
+        return;
+    }
+
+    // 屏幕实在放不下两个窗口：保持默认居中，用户自己拖
+}
+
 void SourceDialog::done(int result)
 {
-    // 关窗/开播时中断在途请求，避免回调打在已关闭的界面上
+    // 关窗时中断在途请求，避免回调打在已隐藏的界面上
     m_ignoreResults = true;
     m_client->abortAll();
     m_pendingSiteKeys.clear();
@@ -170,16 +225,30 @@ QWidget *SourceDialog::createSearchTab()
     m_detailInfo->setOpenExternalLinks(false);
     m_detailInfo->setPlaceholderText(QStringLiteral("剧情简介"));
 
+    // 底部操作区：播放 / 只加列表，两者都不关闭本窗口
+    auto *actionRow = new QHBoxLayout();
+    actionRow->setSpacing(6);
     m_playButton = new QPushButton(QStringLiteral("▶ 播放选中剧集"), rightPanel);
     m_playButton->setObjectName(QStringLiteral("btnPlayEpisode"));
     m_playButton->setEnabled(false);
+    m_addButton = new QPushButton(QStringLiteral("＋ 加入播放列表"), rightPanel);
+    m_addButton->setEnabled(false);
+    actionRow->addWidget(m_playButton, 1);
+    actionRow->addWidget(m_addButton, 0);
+
+    m_actionHint = new QLabel(
+        QStringLiteral("双击剧集也能直接播放；整条线路会一起进播放列表，播完自动下一集"),
+        rightPanel);
+    m_actionHint->setObjectName(QStringLiteral("sourceActionHint"));
+    m_actionHint->setWordWrap(true);
 
     rightLayout->addWidget(m_detailTitle);
     rightLayout->addWidget(m_detailMeta);
     rightLayout->addLayout(lineRow);
     rightLayout->addWidget(m_episodeList, 3);
     rightLayout->addWidget(m_detailInfo, 2);
-    rightLayout->addWidget(m_playButton);
+    rightLayout->addLayout(actionRow);
+    rightLayout->addWidget(m_actionHint);
 
     splitter->addWidget(m_resultTable);
     splitter->addWidget(rightPanel);
@@ -196,6 +265,7 @@ QWidget *SourceDialog::createSearchTab()
     connect(m_lineCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SourceDialog::onPlayLineChanged);
     connect(m_playButton, &QPushButton::clicked, this, &SourceDialog::onPlayClicked);
+    connect(m_addButton, &QPushButton::clicked, this, &SourceDialog::onAddToPlaylistClicked);
     connect(m_episodeList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *) {
         onPlayClicked();
     });
@@ -368,6 +438,7 @@ void SourceDialog::onResultCurrentRowChanged(int row)
     m_episodeList->clear();
     m_detailInfo->clear();
     m_playButton->setEnabled(false);
+    m_addButton->setEnabled(false);
 
     m_client->requestDetail(*site, item.vodId);
 }
@@ -391,6 +462,7 @@ void SourceDialog::onDetailFinished(const QString &siteKey, const VodDetail &det
                                   ? QStringLiteral("这个源没有返回可播放的剧集（可能源已失效）")
                                   : error);
         m_playButton->setEnabled(false);
+        m_addButton->setEnabled(false);
         return;
     }
 
@@ -443,6 +515,7 @@ void SourceDialog::updateEpisodeList()
     const int lineIndex = m_lineCombo->currentIndex();
     if (lineIndex < 0 || lineIndex >= m_detail.lines.size()) {
         m_playButton->setEnabled(false);
+        m_addButton->setEnabled(false);
         return;
     }
 
@@ -456,7 +529,9 @@ void SourceDialog::updateEpisodeList()
     if (m_episodeList->count() > 0) {
         m_episodeList->setCurrentRow(0);
     }
-    m_playButton->setEnabled(m_episodeList->count() > 0);
+    const bool hasEpisodes = m_episodeList->count() > 0;
+    m_playButton->setEnabled(hasEpisodes);
+    m_addButton->setEnabled(hasEpisodes);
 }
 
 void SourceDialog::onPlayLineChanged(int)
@@ -464,36 +539,95 @@ void SourceDialog::onPlayLineChanged(int)
     updateEpisodeList();
 }
 
-void SourceDialog::onPlayClicked()
+QList<PlaylistEntry> SourceDialog::buildEntriesFromCurrentLine() const
 {
+    QList<PlaylistEntry> entries;
+
     const int lineIndex = m_lineCombo->currentIndex();
     if (lineIndex < 0 || lineIndex >= m_detail.lines.size()) {
-        return;
+        return entries;
+    }
+
+    QString ua;
+    QString referer;
+    if (const SourceSite *site = SourceManager::instance().findSite(m_detail.sourceKey)) {
+        ua = site->effectiveUserAgent();
+        referer = site->effectiveReferer();
     }
 
     const VodPlayLine &line = m_detail.lines.at(lineIndex);
-    if (line.episodes.isEmpty()) {
+    entries.reserve(line.episodes.size());
+
+    for (int i = 0; i < line.episodes.size(); ++i) {
+        const VodEpisode &episode = line.episodes.at(i);
+        if (episode.url.trimmed().isEmpty()) {
+            continue;
+        }
+        const QString episodeName = episode.name.isEmpty()
+                                        ? QStringLiteral("第%1集").arg(i + 1)
+                                        : episode.name;
+        entries.append(PlaylistEntry::makeOnline(
+            episode.url.trimmed(),
+            QStringLiteral("%1 · %2").arg(m_detail.name, episodeName),
+            m_detail.sourceName,
+            ua,
+            referer));
+    }
+    return entries;
+}
+
+void SourceDialog::sendEntries(bool alsoPlay)
+{
+    const QList<PlaylistEntry> entries = buildEntriesFromCurrentLine();
+    if (entries.isEmpty()) {
+        m_actionHint->setText(QStringLiteral("⚠ 这条线路没有可播放的地址，换一条线路试试"));
         return;
     }
 
-    int startIndex = m_episodeList->currentRow();
-    if (startIndex < 0) {
+    // 剧集列表里的选中行 → 在线条目下标（跳过的空地址要扣掉）
+    int wanted = m_episodeList->currentRow();
+    if (wanted < 0) {
+        wanted = 0;
+    }
+    int startIndex = 0;
+    const int lineIndex = m_lineCombo->currentIndex();
+    if (lineIndex >= 0 && lineIndex < m_detail.lines.size()) {
+        const VodPlayLine &line = m_detail.lines.at(lineIndex);
+        for (int i = 0; i < wanted && i < line.episodes.size(); ++i) {
+            if (!line.episodes.at(i).url.trimmed().isEmpty()) {
+                ++startIndex;
+            }
+        }
+    }
+    if (startIndex >= entries.size()) {
         startIndex = 0;
     }
 
-    OnlinePlayRequest request;
-    request.title = m_detail.name;
-    request.sourceName = m_detail.sourceName;
-    request.episodes = line.episodes;
-    request.startIndex = startIndex;
+    const QString episodeName = m_episodeList->currentItem()
+                                    ? m_episodeList->currentItem()->text()
+                                    : QString();
 
-    if (const SourceSite *site = SourceManager::instance().findSite(m_detail.sourceKey)) {
-        request.userAgent = site->effectiveUserAgent();
-        request.referer = site->effectiveReferer();
+    if (alsoPlay) {
+        emit playEntriesRequested(entries, startIndex);
+        m_actionHint->setText(QStringLiteral("▶ 正在播放 %1 · %2（整条线路 %3 集已加入播放列表）")
+                                  .arg(m_detail.name, episodeName)
+                                  .arg(entries.size()));
+    } else {
+        emit addEntriesRequested(entries);
+        m_actionHint->setText(QStringLiteral("✓ 已加入播放列表：%1 共 %2 集（已存在的不重复添加）")
+                                  .arg(m_detail.name)
+                                  .arg(entries.size()));
     }
+}
 
-    emit playRequested(request);
-    accept();
+void SourceDialog::onPlayClicked()
+{
+    sendEntries(true);
+}
+
+void SourceDialog::onAddToPlaylistClicked()
+{
+    sendEntries(false);
 }
 
 void SourceDialog::clearDetailPane()
@@ -507,6 +641,7 @@ void SourceDialog::clearDetailPane()
     m_episodeList->clear();
     m_detailInfo->clear();
     m_playButton->setEnabled(false);
+    m_addButton->setEnabled(false);
 }
 
 // ============================================================================
