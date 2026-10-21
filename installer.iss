@@ -3,7 +3,7 @@
 ; 产物：dist\installer\LiteVlcPlayer-<版本>-Setup.exe
 ; 打包前置：先跑 package.bat（生成 dist\LiteVlcPlayer 部署目录）
 #ifndef MyAppVersion
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.1.2"
 #endif
 #define MyAppName "LiteVLC Player"
 #define MyAppPublisher "LiteVLC Team"

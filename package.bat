@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
-set "APPVER=1.1.1"
+set "APPVER=1.1.2"
 set "QTDIR=E:\Qt\6.8.0\mingw_64"
 set "PATH=%QTDIR%\bin;E:\Qt\Tools\mingw1310_64\bin;E:\Qt\Tools\CMake_64\bin;E:\Qt\Tools\Ninja;%PATH%"
 
