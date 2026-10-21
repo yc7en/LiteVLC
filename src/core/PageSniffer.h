@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -19,6 +20,14 @@
 class PageSniffer
 {
 public:
+    /** 一个候选播放地址 */
+    struct Candidate
+    {
+        QString url;
+        QString rule;    // 命中的规则（literal/key/attr/base64），便于排查
+        int score = 0;   // 越大越可能是真正的播放地址
+    };
+
     /** 从响应体解码文本：UTF-8 优先，出替换字符时回退系统编码（中文 Windows 即 GBK） */
     static QString decodeText(const QByteArray &body);
 
@@ -36,4 +45,12 @@ public:
 
     /** 页面上出现 <iframe> 的地址（绝对化、去重，最多 maxCount 个） */
     static QStringList iframeUrls(const QString &pageUrl, const QByteArray &body, int maxCount = 2);
+
+    /**
+     * @brief 从页面里提取候选播放地址
+     *
+     * 规则按命中率排序：地址字面量 → 常见键（player_aaaa / hls 配置）→ 媒体标签属性
+     * → base64 编码串。相对路径按 pageUrl 解析，结果按 score 降序、去重、最多 20 条。
+     */
+    static QList<Candidate> extract(const QString &pageUrl, const QByteArray &body);
 };

@@ -27,6 +27,7 @@ SOURCES += \
     src/core/CmsClient.cpp \
     src/core/StreamProbe.cpp \
     src/core/PageSniffer.cpp \
+    src/core/StreamResolver.cpp \
     src/core/VlcPlayer.cpp \
     src/core/PlaylistManager.cpp \
     src/ui/ClickableSlider.cpp \
@@ -43,6 +44,7 @@ HEADERS += \
     src/core/CmsClient.h \
     src/core/StreamProbe.h \
     src/core/PageSniffer.h \
+    src/core/StreamResolver.h \
     src/core/VlcPlayer.h \
     src/core/PlaylistManager.h \
     src/ui/ClickableSlider.h \

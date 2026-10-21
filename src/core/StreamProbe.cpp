@@ -45,9 +45,12 @@ ProbeKind classifyHtml(const QByteArray &body)
     if (PageSniffer::hasIframe(body)) {
         return ProbeKind::NeedsSniff;
     }
-    // 篇幅极短：网关错误页 / "not found" 那种
+    // 篇幅极短：网关错误页 / "not found" 那种。
+    // 但带 <script> 的短页面多是「地址藏在脚本里」的播放页，不能一律判死。
     if (body.size() < 512) {
-        return ProbeKind::HtmlError;
+        const bool hasScript = PageSniffer::decodeText(body).contains(QStringLiteral("<script"),
+                                                                     Qt::CaseInsensitive);
+        return hasScript ? ProbeKind::NeedsSniff : ProbeKind::HtmlError;
     }
     // 篇幅像正经页面，虽然没看到线索也还有机会
     if (body.size() > 4096) {

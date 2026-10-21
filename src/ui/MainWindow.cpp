@@ -347,6 +347,28 @@ void MainWindow::onOnlinePlayRequested(const OnlinePlayRequest &request)
     playOnlineEpisode(request.startIndex);
 }
 
+static QString failureCategoryText(const ResolveFailure &failure)
+{
+    switch (failure.kind) {
+    case ResolveFailureKind::HtmlError:
+        return QStringLiteral("回源错误页（源站或 CDN 出了故障，跟解析无关）");
+    case ResolveFailureKind::HttpError:
+        return (failure.statusCode == 401 || failure.statusCode == 403)
+                   ? QStringLiteral("防盗链校验或需要登录（缺 Referer / Cookie / 签名）")
+                   : QStringLiteral("播放地址已失效");
+    case ResolveFailureKind::Timeout:
+        return QStringLiteral("连接源站超时或域名解析失败");
+    case ResolveFailureKind::TlsFailed:
+        return QStringLiteral("HTTPS 证书校验失败");
+    case ResolveFailureKind::NoCandidate:
+        return QStringLiteral("播放页里没找到可播地址（可能在加密脚本里或需要登录）");
+    case ResolveFailureKind::NeedsBrowser:
+        return QStringLiteral("地址由网页 JS 运行时计算（纯文本解析无解，需要浏览器内核）");
+    default:
+        return QStringLiteral("其他错误");
+    }
+}
+
 void MainWindow::playOnlineEpisode(int index)
 {
     if (index < 0 || index >= m_onlineRequest.episodes.size()) {
@@ -360,19 +382,23 @@ void MainWindow::playOnlineEpisode(int index)
 
     const VodEpisode episode = m_onlineRequest.episodes.at(index);
 
-    if (!m_probe) {
-        m_probe = new StreamProbe(this);
-        connect(m_probe, &StreamProbe::finished, this, &MainWindow::onStreamProbeFinished);
+    if (!m_resolver) {
+        m_resolver = new StreamResolver(this);
+        connect(m_resolver, &StreamResolver::resolved, this, &MainWindow::onStreamResolved);
+        connect(m_resolver, &StreamResolver::failed, this, &MainWindow::onStreamResolveFailed);
+        connect(m_resolver, &StreamResolver::progress, this, [this](const QString &text) {
+            m_videoWidget->showOsdMessage(text, 7000);
+        });
     }
-    m_probe->cancel();
+    m_resolver->cancel();
 
     // 真实源站很常见的情况是「搜索能通、直链 403 / 是网页 / 链接过期」，
-    // 直接丢给 LibVLC 只会黑屏且没有任何提示，所以先探一次再决定用什么 header 播。
+    // 直接丢给 LibVLC 只会黑屏且没有任何提示，所以先走一遍解析链再决定用什么 header 播。
     m_videoWidget->showOsdMessage(QStringLiteral("正在连接 %1 …").arg(episode.name), 8000);
-    m_probe->start(episode.url, m_onlineRequest.userAgent, m_onlineRequest.referer);
+    m_resolver->resolve(episode.url, m_onlineRequest.userAgent, m_onlineRequest.referer);
 }
 
-void MainWindow::onStreamProbeFinished(const StreamProbeResult &result)
+void MainWindow::onStreamResolved(const ResolvedStream &stream)
 {
     if (!hasOnlineQueue()) {
         return;
@@ -380,40 +406,14 @@ void MainWindow::onStreamProbeFinished(const StreamProbeResult &result)
 
     const VodEpisode episode = m_onlineRequest.episodes.at(m_onlineRequest.startIndex);
 
-    if (!result.ok) {
-        // Qt 与 LibVLC 用的不是同一套 TLS 实现（Qt 走 Schannel，VLC 走 GnuTLS），
-        // 预检挂在证书上并不代表内核也播不了，这种情况直接交给内核试一次。
-        if (result.error.startsWith(QStringLiteral("ssl"))
-            || result.error.startsWith(QStringLiteral("timeout"))) {
-            auto &cfgTls = ConfigManager::instance();
-            m_lastProbeHasHeaders = false;
-            if (m_player->openUrl(episode.url, m_onlineRequest.userAgent, m_onlineRequest.referer,
-                                  cfgTls.hwAccelEnabled(), cfgTls.hwAccelBackend())) {
-                setWindowTitle(QStringLiteral("%1 · %2 - LiteVLC Player")
-                                   .arg(m_onlineRequest.title, episode.name));
-                m_videoWidget->showOsdMessage(
-                    QStringLiteral("预检未通过（%1），已交给播放内核直连").arg(result.userMessage), 4000);
-                return;
-            }
-        }
-
-        m_videoWidget->showOsdMessage(
-            QStringLiteral("播放失败：%1").arg(result.userMessage), 8000);
-        if (m_manualPlayAttempt) {
-            m_manualPlayAttempt = false;
-            showPlaybackFailure(result, episode);
-        }
-        return;
-    }
-
     saveCurrentProgress();  // 本地文件切走前先存进度（网络流内部直接跳过）
 
-    m_lastProbe = result;
-    m_lastProbeHasHeaders = true;
+    m_lastStream = stream;
+    m_lastStreamHasHeaders = true;
     m_playRetryCount = 0;
 
     auto &cfg = ConfigManager::instance();
-    if (!m_player->openUrl(result.url, result.userAgent, result.referer,
+    if (!m_player->openUrl(stream.url, stream.userAgent, stream.referer,
                            cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
         m_videoWidget->showOsdMessage(
             QStringLiteral("无法播放该地址：%1").arg(episode.name), 5000);
@@ -422,40 +422,82 @@ void MainWindow::onStreamProbeFinished(const StreamProbeResult &result)
 
     setWindowTitle(QStringLiteral("%1 · %2 - LiteVLC Player").arg(m_onlineRequest.title, episode.name));
     m_player->setVolume(cfg.volume());
+
+    QString via;
+    if (stream.via == QLatin1String("sniff")) {
+        via = QStringLiteral(" · 已从播放页解析");
+    } else if (stream.via == QLatin1String("iframe")) {
+        via = QStringLiteral(" · 已从内嵌页解析");
+    }
     m_videoWidget->showOsdMessage(
-        QStringLiteral("▶ %1  %2  (%3/%4)")
+        QStringLiteral("▶ %1  %2  (%3/%4)%5")
             .arg(m_onlineRequest.title, episode.name)
             .arg(m_onlineRequest.startIndex + 1)
-            .arg(m_onlineRequest.episodes.size()),
+            .arg(m_onlineRequest.episodes.size())
+            .arg(via),
         3000);
 }
 
-void MainWindow::showPlaybackFailure(const StreamProbeResult &result, const VodEpisode &episode)
+void MainWindow::onStreamResolveFailed(const ResolveFailure &failure)
+{
+    if (!hasOnlineQueue() || failure.kind == ResolveFailureKind::Canceled) {
+        return;
+    }
+
+    const VodEpisode episode = m_onlineRequest.episodes.at(m_onlineRequest.startIndex);
+
+    // Qt 与 LibVLC 用的不是同一套 TLS 实现（Qt 走 Schannel，VLC 走 GnuTLS），
+    // 预检挂在证书/超时上并不代表内核也播不了，这种情况直接交给内核试一次。
+    if (failure.kind == ResolveFailureKind::Timeout
+        || failure.kind == ResolveFailureKind::TlsFailed) {
+        auto &cfgTls = ConfigManager::instance();
+        m_lastStreamHasHeaders = false;
+        if (m_player->openUrl(episode.url, m_onlineRequest.userAgent, m_onlineRequest.referer,
+                              cfgTls.hwAccelEnabled(), cfgTls.hwAccelBackend())) {
+            setWindowTitle(QStringLiteral("%1 · %2 - LiteVLC Player")
+                               .arg(m_onlineRequest.title, episode.name));
+            m_videoWidget->showOsdMessage(
+                QStringLiteral("预检未通过（%1），已交给播放内核直连").arg(failure.userMessage), 4000);
+            return;
+        }
+    }
+
+    m_videoWidget->showOsdMessage(
+        QStringLiteral("播放失败：%1").arg(failure.userMessage), 8000);
+    if (m_manualPlayAttempt) {
+        m_manualPlayAttempt = false;
+        showPlaybackFailure(failure, episode);
+    }
+}
+
+void MainWindow::showPlaybackFailure(const ResolveFailure &failure, const VodEpisode &episode)
 {
     QStringList lines;
-    lines << result.userMessage;
+    lines << failure.userMessage;
     lines << QString();
-    lines << QStringLiteral("分类：%1 · %2").arg(result.category(), result.categoryText());
+    lines << QStringLiteral("分类：%1 · %2").arg(failure.category, failureCategoryText(failure));
     lines << QString();
     lines << QStringLiteral("剧集：%1").arg(episode.name);
     lines << QStringLiteral("地址：%1").arg(episode.url);
 
-    if (result.statusCode > 0) {
-        lines << QStringLiteral("状态码：HTTP %1").arg(result.statusCode);
+    if (failure.statusCode > 0) {
+        lines << QStringLiteral("状态码：HTTP %1").arg(failure.statusCode);
     }
-    if (!result.contentType.isEmpty()) {
-        lines << QStringLiteral("Content-Type：%1").arg(result.contentType);
+    if (!failure.contentType.isEmpty()) {
+        lines << QStringLiteral("Content-Type：%1").arg(failure.contentType);
     }
-    if (result.bodySize > 0) {
-        lines << QStringLiteral("内容长度：%1 字节").arg(result.bodySize);
+    if (failure.bodySize > 0) {
+        lines << QStringLiteral("内容长度：%1 字节").arg(failure.bodySize);
     }
-    if (!result.pageTitle.isEmpty()) {
-        lines << QStringLiteral("页面标题：%1").arg(result.pageTitle);
+    if (!failure.pageTitle.isEmpty()) {
+        lines << QStringLiteral("页面标题：%1").arg(failure.pageTitle);
     }
-    if (result.kind == ProbeKind::NeedsSniff || result.kind == ProbeKind::NeedsBrowser) {
+    if (failure.kind == ResolveFailureKind::NoCandidate
+        || failure.kind == ResolveFailureKind::NeedsBrowser) {
         lines << QStringLiteral("含 iframe：%1　　含 JS 混淆特征：%2")
-                     .arg(result.hasIframe ? QStringLiteral("是") : QStringLiteral("否"),
-                          result.hasEval ? QStringLiteral("是") : QStringLiteral("否"));
+                     .arg(failure.hasIframe ? QStringLiteral("是") : QStringLiteral("否"),
+                          failure.hasEval ? QStringLiteral("是") : QStringLiteral("否"));
+        lines << QStringLiteral("已试地址：%1 个").arg(failure.tried.size());
     }
 
     QMessageBox box(QMessageBox::Warning, QStringLiteral("播放失败"), lines.join(QLatin1Char('\n')),
@@ -463,7 +505,7 @@ void MainWindow::showPlaybackFailure(const StreamProbeResult &result, const VodE
     box.setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     QPushButton *saveBtn = nullptr;
-    if (!result.body.isEmpty()) {
+    if (!failure.body.isEmpty()) {
         saveBtn = box.addButton(QStringLiteral("另存响应内容"), QMessageBox::ActionRole);
     }
     box.exec();
@@ -475,7 +517,7 @@ void MainWindow::showPlaybackFailure(const StreamProbeResult &result, const VodE
                 .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"))));
         QFile file(path);
         if (file.open(QIODevice::WriteOnly)) {
-            file.write(result.body);
+            file.write(failure.body);
             file.close();
             QMessageBox::information(
                 this, QStringLiteral("已保存"),
@@ -495,8 +537,11 @@ void MainWindow::onPlayerError(const QString &message)
     if (m_player->isStreaming() && hasOnlineQueue() && m_playRetryCount < 2) {
         ++m_playRetryCount;
 
-        QString ua = m_lastProbeHasHeaders ? m_lastProbe.userAgent : m_onlineRequest.userAgent;
-        QString referer = m_lastProbeHasHeaders ? m_lastProbe.referer : m_onlineRequest.referer;
+        QString ua = m_lastStreamHasHeaders ? m_lastStream.userAgent : m_onlineRequest.userAgent;
+        QString referer = m_lastStreamHasHeaders ? m_lastStream.referer : m_onlineRequest.referer;
+        const QString target = m_lastStreamHasHeaders && !m_lastStream.url.isEmpty()
+                                   ? m_lastStream.url
+                                   : m_onlineRequest.episodes.at(m_onlineRequest.startIndex).url;
         if (m_playRetryCount == 1) {
             referer.clear();          // 常见：Referer 反而触发 403
         } else {
@@ -505,8 +550,7 @@ void MainWindow::onPlayerError(const QString &message)
         }
 
         auto &cfg = ConfigManager::instance();
-        const VodEpisode episode = m_onlineRequest.episodes.at(m_onlineRequest.startIndex);
-        if (m_player->openUrl(episode.url, ua, referer, cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
+        if (m_player->openUrl(target, ua, referer, cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
             m_videoWidget->showOsdMessage(
                 QStringLiteral("换一组请求头重试（%1/2）…").arg(m_playRetryCount), 3000);
             return;
@@ -548,8 +592,8 @@ void MainWindow::playPrevOnlineEpisode()
 
 void MainWindow::clearOnlineQueue()
 {
-    if (m_probe) {
-        m_probe->cancel();
+    if (m_resolver) {
+        m_resolver->cancel();
     }
     m_onlineRequest = OnlinePlayRequest();
 }

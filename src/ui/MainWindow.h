@@ -4,7 +4,7 @@
 #include <QMenu>
 #include "core/VlcPlayer.h"
 #include "core/CmsClient.h"
-#include "core/StreamProbe.h"
+#include "core/StreamResolver.h"
 #include "core/PlaylistManager.h"
 #include "ui/VideoWidget.h"
 #include "ui/ControlBar.h"
@@ -45,7 +45,8 @@ private slots:
     void onOpenSettings();
     void onOpenOnlineSearch();
     void onOnlinePlayRequested(const OnlinePlayRequest &request);
-    void onStreamProbeFinished(const StreamProbeResult &result);
+    void onStreamResolved(const ResolvedStream &stream);
+    void onStreamResolveFailed(const ResolveFailure &failure);
     void onPlayerError(const QString &message);
 
     void onDurationChanged(qint64 totalMs);
@@ -67,7 +68,7 @@ private:
     void playPrevOnlineEpisode();
 
     /** 播放失败的详细提示：分类 + 诊断字段 + 另存响应内容 */
-    void showPlaybackFailure(const StreamProbeResult &result, const VodEpisode &episode);
+    void showPlaybackFailure(const ResolveFailure &failure, const VodEpisode &episode);
 
     static bool isVideoFile(const QString &filePath);
     static bool isSubtitleFile(const QString &filePath);
@@ -88,10 +89,10 @@ private:
     SourceDialog *m_sourceDialog = nullptr;
     OnlinePlayRequest m_onlineRequest;
 
-    // 播放前预检：找出真正能让源站返回视频的那组 UA / Referer
-    StreamProbe *m_probe = nullptr;
-    StreamProbeResult m_lastProbe;
-    bool m_lastProbeHasHeaders = false;   // m_lastProbe 里的 UA/Referer 是不是预检实测出来的
+    // 播放地址解析链：直连 → 页面嗅探 → 候选复检（见 StreamResolver）
+    StreamResolver *m_resolver = nullptr;
+    ResolvedStream m_lastStream;
+    bool m_lastStreamHasHeaders = false;   // m_lastStream 里的 UA/Referer 是不是实测出来的
     int m_playRetryCount = 0;   // 经 probe 通过但内核仍失败时的重试次数
     bool m_manualPlayAttempt = false;   // 本次播放是用户手点的（失败要弹窗，连播失败只在 OSD 提示）
 
