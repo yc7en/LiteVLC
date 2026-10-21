@@ -1,0 +1,28 @@
+// Windows 资源脚本：exe 图标 + 版本信息
+// 注意：windres 不保证非 ASCII 输入编码，这里全部用 ASCII 文本
+IDI_ICON1 ICON "E:/02Code/player/resources/app.ico"
+
+1 VERSIONINFO
+FILEVERSION 1,1,0,0
+PRODUCTVERSION 1,1,0,0
+FILEOS 0x40004L
+FILETYPE 0x1L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+            VALUE "CompanyName", "LiteVLC Team"
+            VALUE "FileDescription", "LiteVLC Player"
+            VALUE "FileVersion", "1.1.0"
+            VALUE "LegalCopyright", "LiteVLC Team"
+            VALUE "OriginalFilename", "LiteVlcPlayer.exe"
+            VALUE "ProductName", "LiteVLC Player"
+            VALUE "ProductVersion", "1.1.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0804, 1200
+    END
+END

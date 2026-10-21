@@ -3,6 +3,7 @@
 #include "SourceDialog.h"
 #include "core/ConfigManager.h"
 #include "core/SourceManager.h"
+#include "core/UpdateService.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -20,6 +21,7 @@
 #include <QDir>
 #include <QFile>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QPushButton>
 #include <QUrl>
 
@@ -172,6 +174,12 @@ void MainWindow::setupMenuBar()
     }
 
     rebuildTrackMenus();
+
+    // 6. 帮助菜单（手动检查更新 / 关于）
+    QMenu *helpMenu = menuBar()->addMenu(QStringLiteral("帮助(&H)"));
+    helpMenu->addAction(QStringLiteral("检查更新(&U)..."), this, &MainWindow::onCheckUpdate);
+    helpMenu->addSeparator();
+    helpMenu->addAction(QStringLiteral("关于 LiteVLC Player(&A)"), this, &MainWindow::onAbout);
 }
 
 void MainWindow::setupConnections()
@@ -321,6 +329,45 @@ void MainWindow::onOpenOnlineSearch()
     m_sourceDialog->raise();
     m_sourceDialog->activateWindow();
     m_sourceDialog->focusSearchInput();
+}
+
+void MainWindow::onCheckUpdate()
+{
+    QMessageBox box(this);
+    box.setWindowTitle(QStringLiteral("检查更新"));
+    box.setIconPixmap(QPixmap(QStringLiteral(":/icons/app-64.png")));
+
+    if (UpdateService::kUpdateEnabled) {
+        // TODO(更新功能接入时实现)：请求 UpdateService::manifestUrl()，
+        // 比对版本号后提示下载新安装包；保持纯手动触发，不做自动检查。
+        box.setText(QStringLiteral("检查更新功能尚未实现"));
+    } else {
+        box.setText(QStringLiteral("更新通道已预留（手动检查）"));
+        box.setInformativeText(QStringLiteral(
+            "当前版本 %1（%2 · %3）\n\n"
+            "本程序不会在后台自动联网检查更新；"
+            "后续版本接入更新服务器后，可在此手动检查并获取新版安装包。")
+                .arg(UpdateService::currentVersion(),
+                     UpdateService::platformTag(),
+                     UpdateService::channelName()));
+    }
+    box.setStandardButtons(QMessageBox::Ok);
+    box.exec();
+}
+
+void MainWindow::onAbout()
+{
+    QMessageBox box(this);
+    box.setWindowTitle(QStringLiteral("关于 LiteVLC Player"));
+    box.setIconPixmap(QPixmap(QStringLiteral(":/icons/app-256.png")));
+    box.setText(QStringLiteral("LiteVLC Player %1").arg(UpdateService::currentVersion()));
+    box.setInformativeText(QStringLiteral(
+        "轻量级本地 / 在线视频播放器\n\n"
+        "· 基于 Qt 6.8 与 LibVLC 3.0\n"
+        "· 支持 TVBox 订阅格式的在线片源搜索与播放\n"
+        "· 纯本地运行，不上传任何播放数据"));
+    box.setStandardButtons(QMessageBox::Ok);
+    box.exec();
 }
 
 void MainWindow::onPlayEntriesRequested(const QList<PlaylistEntry> &entries, int startIndex)

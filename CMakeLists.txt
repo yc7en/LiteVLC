@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(LiteVlcPlayer VERSION 1.0.0 LANGUAGES CXX)
+project(LiteVlcPlayer VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,6 +38,8 @@ message(STATUS "Found LibVLC Bin Dir: ${VLC_BIN_DIR}")
 
 set(PROJECT_SOURCES
     src/main.cpp
+    src/core/AppPaths.h
+    src/core/AppPaths.cpp
     src/core/ConfigManager.h
     src/core/ConfigManager.cpp
     src/core/SourceManager.h
@@ -50,6 +52,8 @@ set(PROJECT_SOURCES
     src/core/PageSniffer.cpp
     src/core/StreamResolver.h
     src/core/StreamResolver.cpp
+    src/core/UpdateService.h
+    src/core/UpdateService.cpp
     src/core/VlcPlayer.h
     src/core/VlcPlayer.cpp
     src/core/PlaylistEntry.h
@@ -72,9 +76,19 @@ set(PROJECT_SOURCES
     resources/resources.qrc
 )
 
+# Windows 资源（exe 图标 + 版本信息）
+if(WIN32)
+    enable_language(RC)
+    list(APPEND PROJECT_SOURCES resources/app.rc)
+endif()
+
 qt_add_executable(LiteVlcPlayer
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
+)
+
+target_compile_definitions(LiteVlcPlayer PRIVATE
+    APP_VERSION="${PROJECT_VERSION}"
 )
 
 target_include_directories(LiteVlcPlayer PRIVATE

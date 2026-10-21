@@ -1,7 +1,7 @@
 #include "ConfigManager.h"
 
-#include <QCoreApplication>
-#include <QDir>
+#include "AppPaths.h"
+
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -21,11 +21,8 @@ ConfigManager::ConfigManager(QObject *parent)
 
 QString ConfigManager::configFilePath() const
 {
-    QString appDir = QCoreApplication::applicationDirPath();
-    if (appDir.isEmpty()) {
-        appDir = QDir::currentPath();
-    }
-    return QDir(appDir).filePath(QStringLiteral("player_config.json"));
+    // 程序目录可写就就地存（绿色版），Program Files 安装版回退到 %APPDATA%
+    return AppPaths::filePath(QStringLiteral("player_config.json"));
 }
 
 QString ConfigManager::normalizePath(const QString &filePath)

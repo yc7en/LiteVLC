@@ -1,5 +1,7 @@
 #include "SourceManager.h"
 
+#include "AppPaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -123,11 +125,8 @@ SourceManager &SourceManager::instance()
 
 QString SourceManager::configFilePath() const
 {
-    QString appDir = QCoreApplication::applicationDirPath();
-    if (appDir.isEmpty()) {
-        appDir = QDir::currentPath();
-    }
-    return QDir(appDir).filePath(QStringLiteral("sources.json"));
+    // 与 ConfigManager 同一套策略：绿色版就地存，安装版回退到 %APPDATA%
+    return AppPaths::filePath(QStringLiteral("sources.json"));
 }
 
 void SourceManager::load()

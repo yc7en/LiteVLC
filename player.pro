@@ -20,14 +20,20 @@ exists($$PWD/vlc/sdk/include) {
 
 win32: LIBS += -luser32
 
+# Windows 资源（exe 图标 + 版本信息）
+win32: RC_FILE = $$PWD/resources/app.rc
+DEFINES += APP_VERSION=\\\"1.1.0\\\"
+
 SOURCES += \
     src/main.cpp \
+    src/core/AppPaths.cpp \
     src/core/ConfigManager.cpp \
     src/core/SourceManager.cpp \
     src/core/CmsClient.cpp \
     src/core/StreamProbe.cpp \
     src/core/PageSniffer.cpp \
     src/core/StreamResolver.cpp \
+    src/core/UpdateService.cpp \
     src/core/VlcPlayer.cpp \
     src/core/PlaylistManager.cpp \
     src/ui/ClickableSlider.cpp \
@@ -39,12 +45,14 @@ SOURCES += \
     src/ui/MainWindow.cpp
 
 HEADERS += \
+    src/core/AppPaths.h \
     src/core/ConfigManager.h \
     src/core/SourceManager.h \
     src/core/CmsClient.h \
     src/core/StreamProbe.h \
     src/core/PageSniffer.h \
     src/core/StreamResolver.h \
+    src/core/UpdateService.h \
     src/core/VlcPlayer.h \
     src/core/PlaylistEntry.h \
     src/core/PlaylistManager.h \

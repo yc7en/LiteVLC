@@ -49,6 +49,8 @@ private slots:
     void onSetStayOnTop(bool onTop);
     void onOpenSettings();
     void onOpenOnlineSearch();
+    void onCheckUpdate();
+    void onAbout();
 
     /** 在线片源窗口：加入列表并立即播放某一集 */
     void onPlayEntriesRequested(const QList<PlaylistEntry> &entries, int startIndex);

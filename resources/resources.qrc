@@ -13,6 +13,11 @@
         <file>icons/playlist.svg</file>
         <file>icons/settings.svg</file>
         <file>icons/search.svg</file>
+        <file>icons/app.svg</file>
+        <file>app-16.png</file>
+        <file>app-32.png</file>
+        <file>app-64.png</file>
+        <file>app-256.png</file>
         <file>dark_modern.qss</file>
     </qresource>
 </RCC>

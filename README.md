@@ -30,6 +30,12 @@
 - **防盗链支持**：播放时按源配置自动注入 `User-Agent` / `Referer`（Referer 缺省取接口 origin），兼容大部分 403 防盗链站点。
 - **细节处理**：GBK 编码接口自动回退解码、HTML 简介清洗、`ac=videolist` 无结果时自动改用 `ac=detail` 重试、网络流不写入本地进度记忆。
 
+### 4. 桌面集成与分发
+- **应用图标**：程序 / 快捷方式 / 任务栏统一使用内置图标（`resources/app.ico` + 多尺寸 PNG，exe 内嵌版本信息 1.1.0）。
+- **手动检查更新（预留）**：菜单「帮助 → 检查更新」只回显当前版本，程序不会后台自动检查、不会自动下载；更新服务器地址在程序内以混淆方式存放，不出现在日志 / 界面 / 配置里。
+- **Windows 11 安装包**：`package.bat` 一键完成 编译 → windeployqt 部署 → 复制 LibVLC → Inno Setup 打包，产物在 `dist\installer\LiteVlcPlayer-<版本>-Setup.exe`（桌面快捷方式 / 开始菜单 / 卸载 / 清理用户数据一应俱全）。
+- **配置目录自适应**：绿色版（程序目录可写）配置就地存放；安装到 `Program Files` 后自动回退到 `%APPDATA%\LiteVlcPlayer`，安装版也能正常保存设置与进度。
+
 ---
 
 ## 二、 快捷键一览
@@ -121,7 +127,7 @@
 1. 使用 **Qt Creator** 打开 `e:\02code\player\CMakeLists.txt`（或 `e:\02code\player\player.pro`）。
 2. 选择 **Qt 6 (64-bit, MSVC 或 MinGW)** Kit 进行构建。
 3. CMake 会在编译完成后自动将 `libvlc.dll` 与 `libvlccore.dll` 拷贝至生成目录，同时程序启动时会自动定位 `vlc/plugins` 插件目录，直接点击运行即可。
-4. 安装包可用仓库根目录的 `installer.iss`（Inno Setup）打包。
+4. 一键打包 Windows 11 安装包：运行仓库根目录的 `package.bat`（需要 Inno Setup 6，脚本会依次找 `E:\tools\innosetup\ISCC.exe`、`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`，或用环境变量 `INNO_SETUP` 指定）。
 
 ---
 
@@ -135,3 +141,4 @@
 | `BugFix-261021-0001` | 缺陷修复 | 能搜到但播放不了：新增地址预检、错误提示与换头重试 |
 | `R-261021-0002` | 新功能 | 播放页嗅探与失败归因：HTML 分类 A~E、候选地址提取与复检、失败弹窗带诊断与另存响应 |
 | `R-261021-0003` | 新功能 | 在线剧集加入播放列表（本地/在线统一队列）+ 搜索窗改非模态 + 连播保护 |
+| `R-261021-0004` | 新功能 | 应用图标 + 手动检查更新（预留，地址混淆存放）+ Windows 11 安装包一键打包 + 配置目录回退 AppData |
