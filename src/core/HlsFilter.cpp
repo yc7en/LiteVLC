@@ -74,6 +74,25 @@ double medianOf(std::vector<double> values)
     return 0.5 * (values[n / 2 - 1] + values[n / 2]);
 }
 
+// 标签行内嵌的 URI="..." 属性（EXT-X-KEY / EXT-X-MAP / EXT-X-MEDIA 等）也要绝对化：
+// 清单交给 VLC 时地址是本地中继，相对 URI 会被拼到 127.0.0.1 上（如 AES 密钥 enc.key），
+// 中继不认识就 404，解密直接失败。
+QString absolutizeUriAttrs(const QString &line, const QUrl &base)
+{
+    static const QRegularExpression uriAttr(QStringLiteral("URI=\"([^\"]+)\""));
+    QString out = line;
+    int offset = 0;
+    auto it = uriAttr.globalMatch(line);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        const QString abs = base.resolved(QUrl(m.captured(1))).toString(QUrl::FullyEncoded);
+        const int start = m.capturedStart(1) + offset;
+        out.replace(start, m.capturedLength(1), abs);
+        offset += abs.length() - m.capturedLength(1);
+    }
+    return out;
+}
+
 // 媒体清单：解析 -> 过滤 -> 重组
 HlsFilter::Result processMedia(const QStringList &lines, const QUrl &base,
                                const std::function<QString(const QUrl &)> &wrapChild)
@@ -136,10 +155,14 @@ HlsFilter::Result processMedia(const QStringList &lines, const QUrl &base,
     HlsFilter::Result result;
     result.totalBlocks = static_cast<int>(blocks.size());
 
-    // 分片地址绝对化（无论是否过滤都要做，方便中继只代理清单）
+    // 分片地址与标签内嵌 URI 一律绝对化（无论是否过滤都要做，方便中继只代理清单）
     const auto absolutize = [base](QStringList &blockLines) {
         for (QString &l : blockLines) {
-            if (!l.startsWith(QLatin1Char('#'))) {
+            if (l.startsWith(QLatin1Char('#'))) {
+                if (l.contains(QStringLiteral("URI=\""))) {
+                    l = absolutizeUriAttrs(l, base);
+                }
+            } else {
                 l = base.resolved(QUrl(l)).toString(QUrl::FullyEncoded);
             }
         }
@@ -159,7 +182,10 @@ HlsFilter::Result processMedia(const QStringList &lines, const QUrl &base,
 
     auto assemble = [&](const QVector<Block> &kept) -> QString {
         QString out;
-        for (const QString &l : header) {
+        for (QString l : header) {
+            if (l.startsWith(QLatin1Char('#')) && l.contains(QStringLiteral("URI=\""))) {
+                l = absolutizeUriAttrs(l, base);
+            }
             out += l + QLatin1Char('\n');
         }
         bool firstContent = true;
@@ -248,12 +274,10 @@ HlsFilter::Result processMaster(const QStringList &lines, const QUrl &base,
         QString l = line;
         if (!line.startsWith(QLatin1Char('#'))) {
             // STREAM-INF 下一行的子清单地址
-            if (wrapChild) {
-                const QUrl child = base.resolved(QUrl(line));
-                l = wrapChild(child);
-            } else {
-                l = base.resolved(QUrl(line)).toString(QUrl::FullyEncoded);
-            }
+            const QUrl child = base.resolved(QUrl(line));
+            const QString wrapped = wrapChild ? wrapChild(child) : QString();
+            // wrapChild 返回空 = 该地址此前拉取失败过（不再走中继），退回绝对地址直连
+            l = wrapped.isEmpty() ? child.toString(QUrl::FullyEncoded) : wrapped;
         } else if (line.contains(QStringLiteral("URI=\""))) {
             // EXT-X-I-FRAME-STREAM-INF 等标签内嵌的 URI 属性
             auto it = uriAttr.globalMatch(l);
@@ -261,11 +285,13 @@ HlsFilter::Result processMaster(const QStringList &lines, const QUrl &base,
             int offset = 0;
             for (const auto &m : it) {
                 const QUrl child = base.resolved(QUrl(m.captured(1)));
-                const QString wrapped = wrapChild ? wrapChild(child)
-                                                  : child.toString(QUrl::FullyEncoded);
+                const QString wrapped = wrapChild ? wrapChild(child) : QString();
+                const QString target = wrapped.isEmpty()
+                                           ? child.toString(QUrl::FullyEncoded)
+                                           : wrapped;
                 const int start = m.capturedStart(1) + offset;
-                replaced.replace(start, m.capturedLength(1), wrapped);
-                offset += wrapped.length() - m.capturedLength(1);
+                replaced.replace(start, m.capturedLength(1), target);
+                offset += target.length() - m.capturedLength(1);
             }
             l = replaced;
         }

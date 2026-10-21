@@ -64,6 +64,8 @@ private:
     void serveToken(QTcpSocket *socket, const QString &token);
     void respond(QTcpSocket *socket, int statusCode, const QByteArray &contentType,
                  const QByteArray &body);
+    /** 302 回源站：上游拉不动 / 不是清单时，让播放内核直连而不是吃错误页 */
+    void respondRedirect(QTcpSocket *socket, const QUrl &target);
     void fetchUpstream(const Entry &entry, QUrl *finalUrl, QByteArray *body, bool *ok);
 
     QTcpServer *m_server = nullptr;

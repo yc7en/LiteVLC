@@ -199,7 +199,15 @@ void HlsRelay::serveToken(QTcpSocket *socket, const QString &token)
     fetchUpstream(entry, &finalUrl, &body, &ok);
     if (!ok) {
         entry.failed = true;
-        respond(socket, 502, "text/plain", "upstream unavailable");
+        // 拉不动就 302 回源站让 VLC 直连（VLC 自带 UA/Referer，很多站吃得通），
+        // 比直接 502 强——至少还有播出来的机会
+        respondRedirect(socket, finalUrl.isValid() ? finalUrl : entry.upstream);
+        return;
+    }
+    // 拿回来的不是清单（可能是 HTML 错误页 / 风控页），同样交回直连
+    if (!QString::fromUtf8(body).trimmed().startsWith(QStringLiteral("#EXTM3U"))) {
+        entry.failed = true;
+        respondRedirect(socket, finalUrl.isValid() ? finalUrl : entry.upstream);
         return;
     }
 
@@ -233,6 +241,24 @@ void HlsRelay::respond(QTcpSocket *socket, int statusCode, const QByteArray &con
     resp += QByteArrayLiteral("Content-Length: ") + QByteArray::number(body.size()) + "\r\n";
     resp += QByteArrayLiteral("Connection: close\r\n\r\n");
     resp += body;
+
+    socket->write(resp);
+    socket->flush();
+    socket->disconnectFromHost();
+    if (socket->state() != QAbstractSocket::UnconnectedState) {
+        socket->waitForBytesWritten(3000);
+    }
+}
+
+void HlsRelay::respondRedirect(QTcpSocket *socket, const QUrl &target)
+{
+    QByteArray resp;
+    resp += QByteArrayLiteral("HTTP/1.1 302 Found\r\n");
+    resp += QByteArrayLiteral("Server: LiteVlcPlayer-Relay\r\n");
+    resp += QByteArrayLiteral("Date: ") + httpDate() + "\r\n";
+    resp += QByteArrayLiteral("Location: ") + target.toString(QUrl::FullyEncoded).toUtf8() + "\r\n";
+    resp += QByteArrayLiteral("Content-Length: 0\r\n");
+    resp += QByteArrayLiteral("Connection: close\r\n\r\n");
 
     socket->write(resp);
     socket->flush();
