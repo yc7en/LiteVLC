@@ -56,6 +56,7 @@ void ConfigManager::load()
     m_volume            = root.value(QStringLiteral("volume")).toInt(80);
     m_stayOnTop         = root.value(QStringLiteral("stayOnTop")).toBool(false);
     m_playMode          = static_cast<PlayMode>(root.value(QStringLiteral("playMode")).toInt(LoopList));
+    m_hlsAdFilterEnabled = root.value(QStringLiteral("hlsAdFilterEnabled")).toBool(true);
 
     m_historyPositions.clear();
     QJsonObject histObj = root.value(QStringLiteral("history")).toObject();
@@ -79,6 +80,7 @@ void ConfigManager::save()
     root[QStringLiteral("volume")]            = m_volume;
     root[QStringLiteral("stayOnTop")]         = m_stayOnTop;
     root[QStringLiteral("playMode")]          = static_cast<int>(m_playMode);
+    root[QStringLiteral("hlsAdFilterEnabled")] = m_hlsAdFilterEnabled;
 
     QJsonObject histObj;
     for (auto it = m_historyPositions.cbegin(); it != m_historyPositions.cend(); ++it) {
@@ -184,5 +186,11 @@ void ConfigManager::setStayOnTop(bool onTop)
 void ConfigManager::setPlayMode(PlayMode mode)
 {
     m_playMode = mode;
+    save();
+}
+
+void ConfigManager::setHlsAdFilterEnabled(bool enabled)
+{
+    m_hlsAdFilterEnabled = enabled;
     save();
 }

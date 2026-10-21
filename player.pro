@@ -33,6 +33,8 @@ SOURCES += \
     src/core/StreamProbe.cpp \
     src/core/PageSniffer.cpp \
     src/core/StreamResolver.cpp \
+    src/core/HlsFilter.cpp \
+    src/core/HlsRelay.cpp \
     src/core/UpdateService.cpp \
     src/core/VlcPlayer.cpp \
     src/core/PlaylistManager.cpp \
@@ -52,6 +54,8 @@ HEADERS += \
     src/core/StreamProbe.h \
     src/core/PageSniffer.h \
     src/core/StreamResolver.h \
+    src/core/HlsFilter.h \
+    src/core/HlsRelay.h \
     src/core/UpdateService.h \
     src/core/VlcPlayer.h \
     src/core/PlaylistEntry.h \

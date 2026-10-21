@@ -13,6 +13,7 @@
 #include "ui/PlaylistWidget.h"
 
 class SourceDialog;
+class HlsRelay;
 
 /**
  * @brief 极简播放器主窗口
@@ -83,6 +84,9 @@ private:
     /** 中断在途解析并清掉「当前在线条目」标记 */
     void stopOnlineResolve();
 
+    /** HLS 在线流改走本地中继（清单过滤插播广告）；非 HLS 或开关关闭时原样返回 */
+    QString hlsRelayUrl(const QString &url, const QString &userAgent, const QString &referer);
+
     /** 播放失败的详细提示：分类 + 诊断字段 + 另存响应内容 */
     void showPlaybackFailure(const ResolveFailure &failure);
     void showResolveFailureDialog(const ResolveFailure &failure, const PlaylistEntry &entry);
@@ -107,6 +111,8 @@ private:
 
     // 播放地址解析链：直连 → 页面嗅探 → 候选复检（见 StreamResolver）
     StreamResolver *m_resolver = nullptr;
+    // HLS 本地中继：只代理清单文本，分片直连（见 HlsRelay）
+    HlsRelay *m_hlsRelay = nullptr;
     ResolvedStream m_lastStream;
     bool m_lastStreamHasHeaders = false;   // m_lastStream 里的 UA/Referer 是不是实测出来的
     int m_resolvingIndex = -1;             // 正在解析/正在播放的在线条目下标，-1 表示当前不是在线条目

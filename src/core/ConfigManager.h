@@ -63,6 +63,10 @@ public:
     PlayMode playMode() const { return m_playMode; }
     void setPlayMode(PlayMode mode);
 
+    // --- 在线 HLS 广告过滤（本地中继改写清单，剔除 DISCONTINUITY 短广告块） ---
+    bool hlsAdFilterEnabled() const { return m_hlsAdFilterEnabled; }
+    void setHlsAdFilterEnabled(bool enabled);
+
 private:
     explicit ConfigManager(QObject *parent = nullptr);
     ~ConfigManager() override = default;
@@ -83,6 +87,7 @@ private:
     int m_volume = 80;
     bool m_stayOnTop = false;
     PlayMode m_playMode = LoopList;
+    bool m_hlsAdFilterEnabled = true;
 
     QHash<QString, qint64> m_historyPositions;
 };

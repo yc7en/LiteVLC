@@ -72,7 +72,18 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     skipLayout->addRow(m_chkSkipIntro, m_spinSkipIntro);
     skipLayout->addRow(m_chkSkipOutro, m_spinSkipOutro);
 
-    // 3. 历史记录与自动续播分组
+    // 3. 在线播放分组
+    auto *onlineGroup = new QGroupBox(QStringLiteral("在线播放"), this);
+    auto *onlineLayout = new QVBoxLayout(onlineGroup);
+
+    m_chkHlsAdFilter = new QCheckBox(QStringLiteral("过滤 HLS 插播广告 (跳过清单里的短广告块)"), this);
+    m_chkHlsAdFilter->setChecked(cfg.hlsAdFilterEnabled());
+    auto *hlsHint = new QLabel(QStringLiteral("* 播放在线 m3u8 时在本地过滤掉混入的插播广告，只影响在线播放"), this);
+    hlsHint->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
+    onlineLayout->addWidget(m_chkHlsAdFilter);
+    onlineLayout->addWidget(hlsHint);
+
+    // 4. 历史记录与自动续播分组
     auto *histGroup = new QGroupBox(QStringLiteral("历史记录与记忆续播"), this);
     auto *histLayout = new QVBoxLayout(histGroup);
 
@@ -96,6 +107,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     mainLayout->addWidget(hwGroup);
     mainLayout->addWidget(skipGroup);
+    mainLayout->addWidget(onlineGroup);
     mainLayout->addWidget(histGroup);
     mainLayout->addWidget(btnBox);
 }
@@ -113,5 +125,6 @@ void SettingsDialog::onAccept()
     cfg.setSkipOutroSeconds(m_spinSkipOutro->value());
 
     cfg.setAutoResumeEnabled(m_chkAutoResume->isChecked());
+    cfg.setHlsAdFilterEnabled(m_chkHlsAdFilter->isChecked());
     accept();
 }

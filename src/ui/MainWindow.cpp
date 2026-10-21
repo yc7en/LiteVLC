@@ -4,6 +4,8 @@
 #include "core/ConfigManager.h"
 #include "core/SourceManager.h"
 #include "core/UpdateService.h"
+#include "core/HlsFilter.h"
+#include "core/HlsRelay.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -492,6 +494,32 @@ void MainWindow::ensureResolver()
     });
 }
 
+QString MainWindow::hlsRelayUrl(const QString &url, const QString &userAgent, const QString &referer)
+{
+    auto &cfg = ConfigManager::instance();
+    if (!cfg.hlsAdFilterEnabled() || !HlsFilter::looksLikeHls(url)) {
+        return url;
+    }
+
+    if (!m_hlsRelay) {
+        auto *relay = new HlsRelay(this);
+        if (!relay->start()) {
+            relay->deleteLater();
+            return url;
+        }
+        connect(relay, &HlsRelay::adsRemoved, this, [this](int blocks, double seconds) {
+            m_videoWidget->showOsdMessage(
+                QStringLiteral("已跳过 %1 处插播广告（约 %2 秒）")
+                    .arg(blocks)
+                    .arg(qRound(seconds)), 5000);
+        });
+        m_hlsRelay = relay;
+    }
+
+    const QString wrapped = m_hlsRelay->wrapUrl(QUrl(url), userAgent, referer);
+    return wrapped.isEmpty() ? url : wrapped;
+}
+
 void MainWindow::stopOnlineResolve()
 {
     if (m_resolver) {
@@ -543,7 +571,9 @@ void MainWindow::onStreamResolved(const ResolvedStream &stream)
     m_playRetryCount = 0;
 
     auto &cfg = ConfigManager::instance();
-    if (!m_player->openUrl(stream.url, stream.userAgent, stream.referer,
+    // HLS 在线流走本地中继：清单文本过滤插播广告，分片仍由内核直连 CDN
+    const QString playUrl = hlsRelayUrl(stream.url, stream.userAgent, stream.referer);
+    if (!m_player->openUrl(playUrl, stream.userAgent, stream.referer,
                            cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
         m_videoWidget->showOsdMessage(
             QStringLiteral("无法播放该地址：%1").arg(entry.title), 5000);
@@ -584,7 +614,8 @@ void MainWindow::onStreamResolveFailed(const ResolveFailure &failure)
         || failure.kind == ResolveFailureKind::TlsFailed) {
         auto &cfgTls = ConfigManager::instance();
         m_lastStreamHasHeaders = false;
-        if (m_player->openUrl(entry.location, entry.userAgent, entry.referer,
+        const QString playUrlTls = hlsRelayUrl(entry.location, entry.userAgent, entry.referer);
+        if (m_player->openUrl(playUrlTls, entry.userAgent, entry.referer,
                               cfgTls.hwAccelEnabled(), cfgTls.hwAccelBackend())) {
             setWindowTitle(QStringLiteral("%1 - LiteVLC Player").arg(entry.title));
             m_videoWidget->showOsdMessage(
@@ -683,7 +714,9 @@ void MainWindow::onPlayerError(const QString &message)
         }
 
         auto &cfg = ConfigManager::instance();
-        if (m_player->openUrl(target, ua, referer, cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
+        // 若失败原因是中继拉取失败（token 已标记 failed），这里会自动退回直连
+        const QString playUrlRetry = hlsRelayUrl(target, ua, referer);
+        if (m_player->openUrl(playUrlRetry, ua, referer, cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
             m_videoWidget->showOsdMessage(
                 QStringLiteral("换一组请求头重试（%1/2）…").arg(m_playRetryCount), 3000);
             return;

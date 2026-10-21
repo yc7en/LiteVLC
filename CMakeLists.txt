@@ -52,6 +52,10 @@ set(PROJECT_SOURCES
     src/core/PageSniffer.cpp
     src/core/StreamResolver.h
     src/core/StreamResolver.cpp
+    src/core/HlsFilter.h
+    src/core/HlsFilter.cpp
+    src/core/HlsRelay.h
+    src/core/HlsRelay.cpp
     src/core/UpdateService.h
     src/core/UpdateService.cpp
     src/core/VlcPlayer.h

@@ -36,5 +36,6 @@ private:
     QSpinBox  *m_spinSkipOutro = nullptr;
 
     QCheckBox *m_chkAutoResume = nullptr;
+    QCheckBox *m_chkHlsAdFilter = nullptr;
     QPushButton *m_btnClearHistory = nullptr;
 };
