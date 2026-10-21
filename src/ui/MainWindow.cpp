@@ -16,7 +16,11 @@
 #include <QKeyEvent>
 #include <QCloseEvent>
 #include <QActionGroup>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QUrl>
 
 #if defined(Q_OS_WIN)
@@ -397,9 +401,7 @@ void MainWindow::onStreamProbeFinished(const StreamProbeResult &result)
             QStringLiteral("播放失败：%1").arg(result.userMessage), 8000);
         if (m_manualPlayAttempt) {
             m_manualPlayAttempt = false;
-            QMessageBox::warning(this, QStringLiteral("播放失败"),
-                                 QStringLiteral("%1\n\n剧集：%2\n地址：%3")
-                                     .arg(result.userMessage, episode.name, episode.url));
+            showPlaybackFailure(result, episode);
         }
         return;
     }
@@ -426,6 +428,64 @@ void MainWindow::onStreamProbeFinished(const StreamProbeResult &result)
             .arg(m_onlineRequest.startIndex + 1)
             .arg(m_onlineRequest.episodes.size()),
         3000);
+}
+
+void MainWindow::showPlaybackFailure(const StreamProbeResult &result, const VodEpisode &episode)
+{
+    QStringList lines;
+    lines << result.userMessage;
+    lines << QString();
+    lines << QStringLiteral("分类：%1 · %2").arg(result.category(), result.categoryText());
+    lines << QString();
+    lines << QStringLiteral("剧集：%1").arg(episode.name);
+    lines << QStringLiteral("地址：%1").arg(episode.url);
+
+    if (result.statusCode > 0) {
+        lines << QStringLiteral("状态码：HTTP %1").arg(result.statusCode);
+    }
+    if (!result.contentType.isEmpty()) {
+        lines << QStringLiteral("Content-Type：%1").arg(result.contentType);
+    }
+    if (result.bodySize > 0) {
+        lines << QStringLiteral("内容长度：%1 字节").arg(result.bodySize);
+    }
+    if (!result.pageTitle.isEmpty()) {
+        lines << QStringLiteral("页面标题：%1").arg(result.pageTitle);
+    }
+    if (result.kind == ProbeKind::NeedsSniff || result.kind == ProbeKind::NeedsBrowser) {
+        lines << QStringLiteral("含 iframe：%1　　含 JS 混淆特征：%2")
+                     .arg(result.hasIframe ? QStringLiteral("是") : QStringLiteral("否"),
+                          result.hasEval ? QStringLiteral("是") : QStringLiteral("否"));
+    }
+
+    QMessageBox box(QMessageBox::Warning, QStringLiteral("播放失败"), lines.join(QLatin1Char('\n')),
+                    QMessageBox::Ok, this);
+    box.setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    QPushButton *saveBtn = nullptr;
+    if (!result.body.isEmpty()) {
+        saveBtn = box.addButton(QStringLiteral("另存响应内容"), QMessageBox::ActionRole);
+    }
+    box.exec();
+
+    if (saveBtn && box.clickedButton() == saveBtn) {
+        // 存到临时目录而不是弹文件对话框：排查路径越短越好，用户只需把路径发过来
+        const QString path = QDir::temp().filePath(
+            QStringLiteral("lvsniff-%1.html")
+                .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"))));
+        QFile file(path);
+        if (file.open(QIODevice::WriteOnly)) {
+            file.write(result.body);
+            file.close();
+            QMessageBox::information(
+                this, QStringLiteral("已保存"),
+                QStringLiteral("响应内容已保存到：\n%1\n\n排查时把这个文件发出来即可。")
+                    .arg(QDir::toNativeSeparators(path)));
+        } else {
+            QMessageBox::warning(this, QStringLiteral("保存失败"),
+                                 QStringLiteral("无法写入文件：\n%1").arg(QDir::toNativeSeparators(path)));
+        }
+    }
 }
 
 void MainWindow::onPlayerError(const QString &message)

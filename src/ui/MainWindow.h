@@ -66,6 +66,9 @@ private:
     void playNextOnlineEpisode();
     void playPrevOnlineEpisode();
 
+    /** 播放失败的详细提示：分类 + 诊断字段 + 另存响应内容 */
+    void showPlaybackFailure(const StreamProbeResult &result, const VodEpisode &episode);
+
     static bool isVideoFile(const QString &filePath);
     static bool isSubtitleFile(const QString &filePath);
 

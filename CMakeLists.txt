@@ -46,6 +46,8 @@ set(PROJECT_SOURCES
     src/core/CmsClient.cpp
     src/core/StreamProbe.h
     src/core/StreamProbe.cpp
+    src/core/PageSniffer.h
+    src/core/PageSniffer.cpp
     src/core/VlcPlayer.h
     src/core/VlcPlayer.cpp
     src/core/PlaylistManager.h
