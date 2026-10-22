@@ -4,6 +4,11 @@
 
 基于 **Qt 6 (C++ / QWidget)** 与 **LibVLC 3.0.21** 打造的极简、高性能本地视频播放器，剥离了原版 VLC 臃肿的流媒体与媒体库界面，只保留核心高频看片功能；并支持导入 **TVBox 兼容的在线片源**做搜索与追剧。
 
+<p align="center">
+  <img src="docs/images/screenshot-main.png" width="640" alt="LiteVLC Player 主界面" /><br/>
+  <img src="docs/images/screenshot-online-search.png" width="640" alt="在线片源搜索" />
+</p>
+
 ---
 
 ## 一、 已实现功能清单
@@ -179,3 +184,4 @@
 | `R-261022-0002` | 新功能 | macOS（Apple Silicon）构建支持：CMake Apple 分支、.app bundle + Info.plist + icns、平台分支（置顶/数据目录/硬解/字体）、GitHub Actions 一键出 dmg |
 | `R-261022-0004` | 改进 | 中英双语 README：英文作为主入口，中文版移至 `README.zh-CN.md`，两个文件头部都带 Eng / 中文 切换 |
 | `R-261022-0005` | 改进 | Windows 也进 CI：导入库入库、CMake 新增 SDK 探测分支、`windows.yml` 与 macOS 并排出 Setup.exe + 便携 zip |
+| `R-261022-0006` | 改进 | README 首段后补软件截图（主窗口 + 在线片源搜索） |

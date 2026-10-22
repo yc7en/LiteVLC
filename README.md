@@ -4,6 +4,11 @@
 
 A minimal, high-performance local video player built on **Qt 6 (C++ / QWidget)** and **LibVLC 3.0.21**. All the bloat of upstream VLC — streaming services, media library, skins — is stripped away, leaving only the core day-to-day playback features. It also imports **TVBox-compatible online sources** for search and binge-watching.
 
+<p align="center">
+  <img src="docs/images/screenshot-main.png" width="640" alt="LiteVLC Player main window" /><br/>
+  <img src="docs/images/screenshot-online-search.png" width="640" alt="Online source search" />
+</p>
+
 ---
 
 ## 1. Feature list
@@ -184,3 +189,4 @@ Convention: **bug fixes** go to `docs/BugFix-YYMMDD-00XX.md`, **feature iteratio
 | `R-261022-0002` | Feature | macOS (Apple Silicon) support: CMake Apple branch, `.app` bundle with Info.plist and icns, platform branches (always-on-top / data dir / hw decode / fonts), GitHub Actions dmg pipeline |
 | `R-261022-0004` | Improvement | Bilingual README: English as the primary entry, Chinese moved to `README.zh-CN.md`, `Eng / 中文` switch in both headers |
 | `R-261022-0005` | Improvement | Windows joins CI: vendored MinGW import libs, new CMake detection branch, `windows.yml` producing Setup.exe + portable zip alongside the macOS dmg |
+| `R-261022-0006` | Improvement | Add app screenshots (main window + online source search) to both READMEs after the intro |
