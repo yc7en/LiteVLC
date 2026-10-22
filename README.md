@@ -130,6 +130,24 @@
 3. CMake 会在编译完成后自动将 `libvlc.dll` 与 `libvlccore.dll` 拷贝至生成目录，同时程序启动时会自动定位 `vlc/plugins` 插件目录，直接点击运行即可。
 4. 一键打包 Windows 11 安装包：运行仓库根目录的 `package.bat`（需要 Inno Setup 6，脚本会依次找 `E:\tools\innosetup\ISCC.exe`、`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`，或用环境变量 `INNO_SETUP` 指定）。
 
+### macOS（Apple Silicon）构建
+
+只支持 arm64，**不需要 Mac 真机**——CI 用 GitHub 的 `macos-15`（真 Apple Silicon）编译出 dmg：
+
+1. 把仓库推到 GitHub，`.github/workflows/macos.yml` 会自动跑；也可在 Actions 页面手动 `workflow_dispatch`。
+2. CI 流程：装 Qt 6.8.0 → 下载 `vlc-3.0.21-arm64.dmg` 并校验 → CMake（`-DCMAKE_OSX_ARCHITECTURES=arm64`）→ `macdeployqt` → `packaging/macos/bundle.sh` 塞入 VLC、修 install_name、arm64 自检、ad-hoc 签名、出 dmg → 上传 artifact。
+3. 本地在 Mac 上构建同理，只需把 VLC.app 放到 `vlc/`（或 `/Applications/VLC.app`）：
+   ```bash
+   cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+   cmake --build build
+   "$(brew --prefix qt)/bin/macdeployqt" build/LiteVlcPlayer.app -always-overwrite
+   packaging/macos/bundle.sh build/LiteVlcPlayer.app vlc/VLC.app/Contents/MacOS 1.1.3
+   ```
+4. 产物是 ad-hoc 签名（无 Apple 开发者证书），用户首次打开需**右键 → 打开**，或 `xattr -dr com.apple.quarantine /Applications/LiteVlcPlayer.app`；dmg 内已附说明。
+5. macOS 上配置存于 `~/Library/Application Support/LiteVlcPlayer/`（不会写进 .app 包，否则破坏签名封印）。
+
+> VLC 的 C 头文件已随仓库提供（`thirdparty/vlc/include/vlc/`，LGPL-2.1+），CI 无需再拉源码包；macOS 的 `libvlc.dylib` 与 plugins 由 CI 从官方 arm64 dmg 里取。
+
 ---
 
 ## 五、 变更记录
@@ -146,3 +164,4 @@
 | `R-261021-0005` | 新功能 | HLS 插播广告过滤：本地中继改写 m3u8 清单，按 DISCONTINUITY 块时长剔除广告，分片直连不过中继 |
 | `BugFix-261021-0002` | 缺陷修复 | AES-128 加密源经中继拿不到有效媒体：EXT-X-KEY/MAP 相对 URI 绝对化，中继失败 302 回源站 |
 | `R-261022-0001` | 改进 | 订阅导入报错带统计（N 个源全是 type=3 Spider 等原因说明），混合配置导入成功时告知跳过数 |
+| `R-261022-0002` | 新功能 | macOS（Apple Silicon）构建支持：CMake Apple 分支、.app bundle + Info.plist + icns、平台分支（置顶/数据目录/硬解/字体）、GitHub Actions 一键出 dmg |

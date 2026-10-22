@@ -20,9 +20,18 @@ exists($$PWD/vlc/sdk/include) {
 
 win32: LIBS += -luser32
 
+# macOS：头文件用仓库内的 thirdparty/vlc/include，库来自 VLC.app
+macx {
+    INCLUDEPATH += $$PWD/thirdparty/vlc/include
+    INCLUDEPATH += $$PWD/vlc/VLC.app/Contents/MacOS/include
+    LIBS += -L$$PWD/vlc/VLC.app/Contents/MacOS/lib -llibvlc
+    OBJECTIVE_SOURCES += src/platform/MacWindow.mm
+    ICON = $$PWD/resources/app.icns
+}
+
 # Windows 资源（exe 图标 + 版本信息）
 win32: RC_FILE = $$PWD/resources/app.rc
-DEFINES += APP_VERSION=\\\"1.1.0\\\"
+DEFINES += APP_VERSION=\\\"1.1.3\\\"
 
 SOURCES += \
     src/main.cpp \
@@ -47,6 +56,7 @@ SOURCES += \
     src/ui/MainWindow.cpp
 
 HEADERS += \
+    src/platform/MacWindow.h \
     src/core/AppPaths.h \
     src/core/ConfigManager.h \
     src/core/SourceManager.h \

@@ -4,6 +4,7 @@
 #include "core/ConfigManager.h"
 #include "core/SourceManager.h"
 #include "core/UpdateService.h"
+#include "platform/MacWindow.h"
 #include "core/HlsFilter.h"
 #include "core/HlsRelay.h"
 
@@ -936,13 +937,18 @@ void MainWindow::onToggleFullScreen()
 {
     if (isFullScreen()) {
         showNormal();
-        menuBar()->show();
+        // macOS 的菜单栏在系统顶栏，QMenuBar::show/hide 无效（全屏时系统自动隐藏）
+        if (!MacWindow::usesNativeMenuBar()) {
+            menuBar()->show();
+        }
         m_controlBar->show();
         m_playlistWidget->setVisible(m_playlistWasVisibleBeforeFs);
         m_videoWidget->showOsdMessage(QStringLiteral("⛶ 已退出全屏"));
     } else {
         m_playlistWasVisibleBeforeFs = m_playlistWidget->isVisible();
-        menuBar()->hide();
+        if (!MacWindow::usesNativeMenuBar()) {
+            menuBar()->hide();
+        }
         m_playlistWidget->hide();
         m_controlBar->hide();
         showFullScreen();
@@ -964,6 +970,10 @@ void MainWindow::onSetStayOnTop(bool onTop)
     // 使用 Win32 SetWindowPos 实现零闪烁置顶切换，避免 Qt setWindowFlag 重建 HWND 导致 LibVLC 画面黑屏
     HWND hwnd = reinterpret_cast<HWND>(winId());
     SetWindowPos(hwnd, onTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#elif defined(Q_OS_MAC)
+    // macOS 同理：setWindowFlag 会重建 NSWindow，LibVLC 的 NSView 绑定随之中断（黑屏），
+    // 所以直接改 NSWindow 层级
+    MacWindow::setAlwaysOnTop(this, onTop);
 #else
     setWindowFlag(Qt::WindowStaysOnTopHint, onTop);
     show();

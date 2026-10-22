@@ -14,12 +14,13 @@ VlcPlayer::VlcPlayer(QObject *parent)
     : QObject(parent)
 {
     // 自动探测 plugins 目录并设置 VLC_PLUGIN_PATH 环境变量，免手动配置
+    // Windows 绿色版：plugins 与 exe 同级；macOS bundle：plugins 放在 Contents/Frameworks 下
     const QString appDir = QCoreApplication::applicationDirPath();
     const QStringList candidatePluginDirs = {
         QDir(appDir).filePath(QStringLiteral("plugins")),
+        QDir(appDir).filePath(QStringLiteral("../Frameworks/plugins")),
         QDir(appDir).filePath(QStringLiteral("vlc/plugins")),
         QDir(appDir).filePath(QStringLiteral("../vlc/plugins")),
-        QStringLiteral("e:/02code/player/vlc/plugins")
     };
 
     for (const QString &dirPath : candidatePluginDirs) {

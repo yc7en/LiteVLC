@@ -1,0 +1,116 @@
+name: macOS (Apple Silicon)
+
+# 只做 macOS arm64：GitHub 的 macos-15 runner 是真 Apple Silicon 硬件。
+# 产物是 ad-hoc 签名的 dmg（无 Apple 开发者证书，用户首次打开需右键→打开）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'packaging/**'
+      - 'thirdparty/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/macos.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '6.8.0'
+  VLC_VERSION: '3.0.21'
+
+jobs:
+  build:
+    name: Build arm64
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          uname -m
+          sw_vers
+          xcodebuild -version
+
+      - name: 安装 Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+
+      - name: 下载并挂载 VLC（arm64）
+        run: |
+          set -euo pipefail
+          DMG="vlc-${VLC_VERSION}-arm64.dmg"
+          BASE="https://get.videolan.org/vlc/${VLC_VERSION}/macosx"
+          curl -fL --retry 3 -o "$DMG" "$BASE/$DMG"
+          curl -fL --retry 3 -o "$DMG.sha256" "$BASE/$DMG.sha256"
+          EXPECTED="$(cat "$DMG.sha256" | awk '{print $1}')"
+          ACTUAL="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+          echo "expected=$EXPECTED actual=$ACTUAL"
+          [ "$EXPECTED" = "$ACTUAL" ] || { echo "VLC dmg 校验失败"; exit 1; }
+          mkdir -p /tmp/vlc
+          hdiutil attach "$DMG" -nobrowse -quiet -mountpoint /tmp/vlc
+          mkdir -p vlc
+          cp -a /tmp/vlc/VLC.app vlc/
+          hdiutil detach /tmp/vlc -quiet
+          lipo -archs vlc/VLC.app/Contents/MacOS/lib/libvlc.dylib
+
+      - name: 读取版本号
+        id: ver
+        run: |
+          VERSION="$(grep -oE 'project\(LiteVlcPlayer VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $3}')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "版本: $VERSION"
+
+      - name: 配置
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+
+      - name: 编译
+        run: cmake --build build --parallel
+
+      - name: 打包 Qt 依赖
+        run: |
+          APP="build/LiteVlcPlayer.app"
+          ls -la "$APP/Contents/MacOS"
+          "$QT_ROOT_DIR/bin/macdeployqt" "$APP" -always-overwrite -verbose=1
+
+      - name: 塞入 VLC + 修路径 + ad-hoc 签名
+        run: |
+          chmod +x packaging/macos/bundle.sh
+          packaging/macos/bundle.sh \
+            "build/LiteVlcPlayer.app" \
+            "vlc/VLC.app/Contents/MacOS" \
+            "${{ steps.ver.outputs.version }}"
+
+      - name: 上传 dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiteVlcPlayer-macos-arm64
+          path: build/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 失败时打印 bundle 结构
+        if: failure()
+        run: |
+          find build/LiteVlcPlayer.app -maxdepth 3 | head -50 || true
+          otool -L build/LiteVlcPlayer.app/Contents/MacOS/LiteVlcPlayer || true

@@ -27,15 +27,25 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     m_comboHwBackend = new QComboBox(this);
     m_comboHwBackend->addItem(QStringLiteral("自动选择 (Auto - 推荐)"), QStringLiteral("any"));
+#if defined(Q_OS_MAC)
+    // macOS 只有 VideoToolbox 这一条硬解路径（d3d11va / dxva2 是 Windows 专有）
+    m_comboHwBackend->addItem(QStringLiteral("VideoToolbox (Apple 芯片硬解)"),
+                              QStringLiteral("videotoolbox"));
+#else
     m_comboHwBackend->addItem(QStringLiteral("Direct3D 11 (d3d11va - Win10/11 推荐)"), QStringLiteral("d3d11va"));
     m_comboHwBackend->addItem(QStringLiteral("DXVA2 (dxva2 - 兼容性好)"), QStringLiteral("dxva2"));
+#endif
 
+    // 后端是从配置文件读出来的：换平台后旧值（如 mac 上读到 dxva2）不在列表里，
+    // 必须回退到「自动」，否则下拉框会停在错误项、播放时拿到非法后端名
+    int backendIndex = -1;
     for (int i = 0; i < m_comboHwBackend->count(); ++i) {
         if (m_comboHwBackend->itemData(i).toString() == cfg.hwAccelBackend()) {
-            m_comboHwBackend->setCurrentIndex(i);
+            backendIndex = i;
             break;
         }
     }
+    m_comboHwBackend->setCurrentIndex(backendIndex >= 0 ? backendIndex : 0);
     m_comboHwBackend->setEnabled(m_chkHwAccel->isChecked());
     connect(m_chkHwAccel, &QCheckBox::toggled, m_comboHwBackend, &QWidget::setEnabled);
 

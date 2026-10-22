@@ -10,6 +10,7 @@ namespace {
 
 bool underProgramFiles(const QString &dir)
 {
+#if defined(Q_OS_WIN)
     const QStringList roots = {
         QDir::fromNativeSeparators(qEnvironmentVariable("ProgramFiles")),
         QDir::fromNativeSeparators(qEnvironmentVariable("ProgramFiles(x86)")),
@@ -20,7 +21,22 @@ bool underProgramFiles(const QString &dir)
             return true;
         }
     }
+#else
+    Q_UNUSED(dir);
+#endif
     return false;
+}
+
+// macOS：.app 包内哪怕是当前用户所有、文件权限可写，也绝不能往包里写——
+// 那样会破坏代码签名的封印（bundle 一致性校验失败），而且升级时配置会被覆盖。
+bool insideAppBundle(const QString &dir)
+{
+#if defined(Q_OS_MAC)
+    return dir.contains(QStringLiteral(".app/Contents/"), Qt::CaseInsensitive);
+#else
+    Q_UNUSED(dir);
+    return false;
+#endif
 }
 
 } // namespace
@@ -35,7 +51,10 @@ QString dataDir()
     }
 
     const QString appDir = QCoreApplication::applicationDirPath();
-    if (!appDir.isEmpty() && !underProgramFiles(appDir) && QFileInfo(appDir).isWritable()) {
+    if (!appDir.isEmpty()
+        && !insideAppBundle(appDir)
+        && !underProgramFiles(appDir)
+        && QFileInfo(appDir).isWritable()) {
         cached = appDir; // 绿色版：就地存放
         return cached;
     }
