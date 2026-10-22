@@ -341,18 +341,21 @@ void MainWindow::onCheckUpdate()
     box.setIconPixmap(QPixmap(QStringLiteral(":/icons/app-64.png")));
 
     if (UpdateService::kUpdateEnabled) {
-        // TODO(更新功能接入时实现)：请求 UpdateService::manifestUrl()，
-        // 比对版本号后提示下载新安装包；保持纯手动触发，不做自动检查。
+        // TODO(更新功能接入时实现)：请求 UpdateService::latestReleaseApiUrl()，
+        // 比对 tag_name 与 currentVersion() 后提示下载对应附件；保持纯手动触发。
         box.setText(QStringLiteral("检查更新功能尚未实现"));
     } else {
         box.setText(QStringLiteral("更新通道已预留（手动检查）"));
+        const QString repo = UpdateService::repository();
         box.setInformativeText(QStringLiteral(
             "当前版本 %1（%2 · %3）\n\n"
-            "本程序不会在后台自动联网检查更新；"
-            "后续版本接入更新服务器后，可在此手动检查并获取新版安装包。")
+            "本程序不会在后台自动联网检查更新。更新源为 GitHub Releases%4。")
                 .arg(UpdateService::currentVersion(),
                      UpdateService::platformTag(),
-                     UpdateService::channelName()));
+                     UpdateService::channelName(),
+                     repo.isEmpty()
+                         ? QStringLiteral("（尚未配置仓库，正式发布时填入 owner/repo）")
+                         : QStringLiteral("：%1").arg(repo)));
     }
     box.setStandardButtons(QMessageBox::Ok);
     box.exec();

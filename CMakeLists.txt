@@ -136,6 +136,10 @@ if(APPLE)
     list(APPEND PROJECT_SOURCES resources/app.icns)
 endif()
 
+# GitHub Releases 更新源：owner/repo。留空 = 未配置（检查更新只回显版本）。
+# 例：-DAPP_UPDATE_REPO=yourname/litevlc-player
+set(APP_UPDATE_REPO "" CACHE STRING "GitHub repository (owner/repo) used as the release/update source")
+
 qt_add_executable(LiteVlcPlayer
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
@@ -143,6 +147,7 @@ qt_add_executable(LiteVlcPlayer
 
 target_compile_definitions(LiteVlcPlayer PRIVATE
     APP_VERSION="${PROJECT_VERSION}"
+    APP_UPDATE_REPO="${APP_UPDATE_REPO}"
 )
 
 target_include_directories(LiteVlcPlayer PRIVATE
