@@ -141,6 +141,9 @@ set(PROJECT_SOURCES
 # Windows 资源（exe 图标 + 版本信息）/ macOS bundle 资源（icns）
 if(WIN32)
     enable_language(RC)
+    # app.rc 里的 ICON "app.ico" 是相对文件名，windres 只按 -I 搜索该文件；
+    # 不写死绝对路径，否则 CI（或换台机器、换个克隆目录）就编不过。
+    set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} -I\"${CMAKE_CURRENT_SOURCE_DIR}/resources\"")
     list(APPEND PROJECT_SOURCES resources/app.rc)
 endif()
 

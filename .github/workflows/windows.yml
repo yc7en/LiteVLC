@@ -148,8 +148,14 @@ jobs:
           }
           $lines = Get-Content build.log
           Write-Host "日志行数: $($lines.Count)"
-          $errs = $lines | Where-Object { $_ -match 'error:|fatal error|CMake Error|FAILED:' } | Select-Object -First 8
-          if (-not $errs) { $errs = Get-Content build.log -Tail 30 }
+          $hit = $lines | Select-String -Pattern 'FAILED:|error:|fatal error|CMake Error' | Select-Object -First 1
+          if ($hit) {
+            $i = [Math]::Max(0, $hit.LineNumber - 1)
+            $j = [Math]::Min($lines.Count - 1, $i + 15)
+            $errs = $lines[$i..$j]
+          } else {
+            $errs = $lines | Select-Object -Last 30
+          }
           $msg = ($errs | ForEach-Object { "$_".Trim() }) -join ' ~ '
           $short = $msg.Substring(0, [Math]::Min(3800, $msg.Length))
           Write-Host "::error title=Windows 编译失败::$short"

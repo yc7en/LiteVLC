@@ -1,6 +1,9 @@
 // Windows 资源脚本：exe 图标 + 版本信息
-// 注意：windres 不保证非 ASCII 输入编码，这里全部用 ASCII 文本
-IDI_ICON1 ICON "E:/02Code/player/resources/app.ico"
+// 注意：
+//  1) windres 不保证非 ASCII 输入编码，这里全部用 ASCII 文本；
+//  2) 图标必须写相对文件名，由构建系统用 -I 指向 resources 目录。
+//     写死绝对路径（如 E:/02Code/player/...）会导致 CI 或换目录后 windres 直接失败。
+IDI_ICON1 ICON "app.ico"
 
 1 VERSIONINFO
 FILEVERSION 1,1,3,0

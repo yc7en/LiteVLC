@@ -31,6 +31,8 @@ macx {
 
 # Windows 资源（exe 图标 + 版本信息）
 win32: RC_FILE = $$PWD/resources/app.rc
+# app.rc 里 ICON "app.ico" 用相对文件名，需要把 resources 加进 windres 的搜索路径
+win32: RC_INCLUDEPATH += $$PWD/resources
 DEFINES += APP_VERSION=\\\"1.1.3\\\"
 # GitHub Releases 更新源（owner/repo）；留空表示未配置
 DEFINES += APP_UPDATE_REPO=\\\"yc7en/LiteVLC\\\"
