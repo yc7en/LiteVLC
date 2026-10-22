@@ -54,17 +54,44 @@ jobs:
 
       - name: 下载并挂载 VLC（arm64）
         run: |
-          set -euo pipefail
+          set -uo pipefail
           DMG="vlc-${VLC_VERSION}-arm64.dmg"
-          BASE="https://get.videolan.org/vlc/${VLC_VERSION}/macosx"
-          curl -fL --retry 3 -o "$DMG" "$BASE/$DMG"
-          curl -fL --retry 3 -o "$DMG.sha256" "$BASE/$DMG.sha256"
-          EXPECTED="$(cat "$DMG.sha256" | awk '{print $1}')"
-          ACTUAL="$(shasum -a 256 "$DMG" | awk '{print $1}')"
-          echo "expected=$EXPECTED actual=$ACTUAL"
-          [ "$EXPECTED" = "$ACTUAL" ] || { echo "VLC dmg 校验失败"; exit 1; }
+          MIRRORS=(
+            "https://get.videolan.org/vlc/${VLC_VERSION}/macosx"
+            "https://download.videolan.org/pub/videolan/vlc/${VLC_VERSION}/macosx"
+          )
+          ok=0
+          for BASE in "${MIRRORS[@]}"; do
+            echo "==> 下载 $BASE/$DMG"
+            if curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -o "$DMG" "$BASE/$DMG"; then
+              ok=1; break
+            fi
+            echo "!! 该镜像失败"
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error title=VLC dmg 下载失败::已尝试 ${MIRRORS[*]}"
+            exit 1
+          fi
+          ls -l "$DMG"
+
+          # sha256 只做完整性校验；官方镜像偶尔不提供 .sha256，拿不到不算致命
+          if curl -fsSL --retry 2 --connect-timeout 20 -o "$DMG.sha256" "${MIRRORS[0]}/$DMG.sha256"; then
+            EXPECTED="$(awk '{print $1}' "$DMG.sha256")"
+            ACTUAL="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+            echo "expected=$EXPECTED actual=$ACTUAL"
+            if [ "$EXPECTED" != "$ACTUAL" ]; then
+              echo "::error title=VLC dmg 校验失败::expected=$EXPECTED actual=$ACTUAL"
+              exit 1
+            fi
+          else
+            echo "::warning title=跳过 sha256 校验::拿不到 $DMG.sha256"
+          fi
+
           mkdir -p /tmp/vlc
-          hdiutil attach "$DMG" -nobrowse -quiet -mountpoint /tmp/vlc
+          hdiutil attach "$DMG" -nobrowse -quiet -mountpoint /tmp/vlc || {
+            echo "::error title=挂载 VLC dmg 失败::$(hdiutil attach "$DMG" -nobrowse 2>&1 | tail -3)"
+            exit 1
+          }
           mkdir -p vlc
           cp -a /tmp/vlc/VLC.app vlc/
           hdiutil detach /tmp/vlc -quiet
