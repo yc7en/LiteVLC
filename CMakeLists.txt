@@ -137,8 +137,8 @@ if(APPLE)
 endif()
 
 # GitHub Releases 更新源：owner/repo。留空 = 未配置（检查更新只回显版本）。
-# 例：-DAPP_UPDATE_REPO=yourname/litevlc-player
-set(APP_UPDATE_REPO "" CACHE STRING "GitHub repository (owner/repo) used as the release/update source")
+# 换仓库时改这里，或命令行覆盖：-DAPP_UPDATE_REPO=owner/repo
+set(APP_UPDATE_REPO "yc7en/LiteVLC" CACHE STRING "GitHub repository (owner/repo) used as the release/update source")
 
 qt_add_executable(LiteVlcPlayer
     MANUAL_FINALIZATION

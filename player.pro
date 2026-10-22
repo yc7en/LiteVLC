@@ -33,7 +33,7 @@ macx {
 win32: RC_FILE = $$PWD/resources/app.rc
 DEFINES += APP_VERSION=\\\"1.1.3\\\"
 # GitHub Releases 更新源（owner/repo）；留空表示未配置
-DEFINES += APP_UPDATE_REPO=\\\"\\\"
+DEFINES += APP_UPDATE_REPO=\\\"yc7en/LiteVLC\\\"
 
 SOURCES += \
     src/main.cpp \

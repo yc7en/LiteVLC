@@ -33,7 +33,7 @@
 
 ### 4. 桌面集成与分发
 - **应用图标**：程序 / 快捷方式 / 任务栏统一使用内置图标（`resources/app.ico` + 多尺寸 PNG，exe 内嵌版本信息 1.1.0）。
-- **手动检查更新（预留）**：菜单「帮助 → 检查更新」只回显当前版本，程序不会后台自动检查、不会自动下载；更新源为仓库的 GitHub Releases（`-DAPP_UPDATE_REPO=owner/repo` 注入），不内置任何自建服务器地址。
+- **手动检查更新（预留）**：菜单「帮助 → 检查更新」只回显当前版本，程序不会后台自动检查、不会自动下载；更新源为 GitHub Releases（仓库 `yc7en/LiteVLC`，由 `-DAPP_UPDATE_REPO=owner/repo` 注入），不内置任何自建服务器地址。
 - **Windows 11 安装包**：`package.bat` 一键完成 编译 → windeployqt 部署 → 复制 LibVLC → Inno Setup 打包，产物在 `dist\installer\LiteVlcPlayer-<版本>-Setup.exe`（桌面快捷方式 / 开始菜单 / 卸载 / 清理用户数据一应俱全）。
 - **配置目录自适应**：绿色版（程序目录可写）配置就地存放；安装到 `Program Files` 后自动回退到 `%APPDATA%\LiteVlcPlayer`，安装版也能正常保存设置与进度。
 
