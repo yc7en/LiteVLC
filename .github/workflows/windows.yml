@@ -47,7 +47,7 @@ jobs:
         run: |
           cmake --version
           ninja --version
-          where.exe 7z
+          where.exe tar
 
       - name: 安装 Qt ${{ env.QT_VERSION }}（MinGW）
         uses: jurplel/install-qt-action@v4
@@ -88,16 +88,15 @@ jobs:
           }
           Write-Host ("下载完成: {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
 
-          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
-          if (-not $sevenZip) { $sevenZip = "C:\Program Files\7-Zip\7z.exe" }
-          if (-not (Test-Path $sevenZip)) {
-            Write-Host "::error title=找不到 7z::既不在 PATH 也不在 C:\Program Files\7-Zip"
-            throw "找不到 7z"
-          }
-          7z x $zip -y -o. | Select-Object -Last 3
+          # 用 Windows 10+ 自带的 bsdtar 解 zip：比 Expand-Archive 快得多，也不依赖 7z
+          tar.exe -xf $zip -C .
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error title=VLC 解压失败::7z exit=$LASTEXITCODE"
-            throw "VLC 解压失败"
+            Write-Host "tar 解压失败 exit=$LASTEXITCODE，回退 Expand-Archive"
+            Expand-Archive -Path $zip -DestinationPath . -Force
+          }
+          if (-not (Test-Path "vlc-$env:VLC_VERSION")) {
+            Write-Host "::error title=VLC 解压后目录不存在::期望 vlc-$env:VLC_VERSION，实际: $((Get-ChildItem -Directory | Select-Object -ExpandProperty Name) -join ', ')"
+            throw "VLC 解压后目录不存在"
           }
           Move-Item -Path "vlc-$env:VLC_VERSION" -Destination "vlc"
           Get-ChildItem vlc | Select-Object -ExpandProperty Name
