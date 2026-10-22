@@ -19,3 +19,6 @@
 *.png           binary
 *.dll           binary
 *.lib           binary
+
+# Inno Setup 语言包：保持 CRLF + BOM，避免被 eol 归一化后 ISCC 读不了
+*.isl           text eol=crlf

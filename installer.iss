@@ -36,7 +36,10 @@ VersionInfoProductName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 简体中文语言包随仓库提供：不同版本的 Inno Setup 安装包未必附带
+; Languages\ChineseSimplified.isl（CI 的 windows-2022 镜像就没有），
+; 用 compiler: 前缀会直接编译失败，所以固定用仓库内这一份。
+Name: "chinesesimp"; MessagesFile: "packaging\windows\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
