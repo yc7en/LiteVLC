@@ -202,3 +202,4 @@ Convention: **bug fixes** go to `docs/BugFix-YYMMDD-00XX.md`, **feature iteratio
 | `R-261022-0005` | Improvement | Windows joins CI: vendored MinGW import libs, new CMake detection branch, `windows.yml` producing Setup.exe + portable zip alongside the macOS dmg |
 | `R-261022-0006` | Improvement | Add app screenshots (main window + online source search) to both READMEs after the intro |
 | `R-261022-0007` | Improvement | Tag-triggered releases: pushing `v*` builds both platforms and attaches Setup.exe + dmg to one Release |
+| `R-261022-0008` | Feature | Auto subtitles + auto translation (planned): local ASR via sherpa-onnx/SenseVoice with whisper.cpp fallback, llama.cpp MT, self-drawn overlay; audio acquisition split by source type (local pre-transcode / network chunked pre-fetch / live dump) |
