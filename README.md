@@ -151,6 +151,17 @@ One push to `main` (or a manual `workflow_dispatch`) starts two parallel workflo
 
 Both read the version from `CMakeLists.txt`, so the two artifacts always carry the same version number. Only commits touching `src/`, `resources/`, `packaging/`, `thirdparty/`, `installer.iss` or `CMakeLists.txt` trigger them — docs-only changes skip CI.
 
+### Publishing a release
+
+Bump the version everywhere it is duplicated (`project(... VERSION)` in `CMakeLists.txt`, `FILEVERSION` in `resources/app.rc`, `MyAppVersion` in `installer.iss`, `APPVER` in `package.bat`), then push a tag:
+
+```bash
+git tag v1.1.3
+git push origin v1.1.3
+```
+
+Both workflows run on the tag and attach their own artifact to the same Release: `LiteVlcPlayer-1.1.3-Setup.exe` (plus a portable zip) from Windows, `LiteVlcPlayer-1.1.3-arm64.dmg` from macOS. No manual download-and-upload step. Tag pushes bypass the `paths` filter, so the release always builds. To just verify a build without releasing, push a normal commit or use `workflow_dispatch` — artifacts then stay in Actions for 14 days.
+
 ### macOS (Apple Silicon)
 
 arm64 only — **no Mac hardware required**: CI compiles the dmg on GitHub's `macos-15` runners (real Apple Silicon).
@@ -190,3 +201,4 @@ Convention: **bug fixes** go to `docs/BugFix-YYMMDD-00XX.md`, **feature iteratio
 | `R-261022-0004` | Improvement | Bilingual README: English as the primary entry, Chinese moved to `README.zh-CN.md`, `Eng / 中文` switch in both headers |
 | `R-261022-0005` | Improvement | Windows joins CI: vendored MinGW import libs, new CMake detection branch, `windows.yml` producing Setup.exe + portable zip alongside the macOS dmg |
 | `R-261022-0006` | Improvement | Add app screenshots (main window + online source search) to both READMEs after the intro |
+| `R-261022-0007` | Improvement | Tag-triggered releases: pushing `v*` builds both platforms and attaches Setup.exe + dmg to one Release |

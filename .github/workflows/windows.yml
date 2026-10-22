@@ -8,6 +8,9 @@ name: Windows (x64)
 on:
   push:
     branches: [main]
+    # 打 tag（v1.2.3）时也跑一遍，并把安装包挂到同名 Release 上。
+    # 注意：GitHub 对 tag push 不评估 paths 过滤，所以 tag 一定能触发。
+    tags: ['v*']
     paths:
       - 'src/**'
       - 'resources/**'
@@ -23,6 +26,10 @@ on:
       - 'CMakeLists.txt'
       - 'installer.iss'
   workflow_dispatch:
+
+# 建 Release / 传资产需要写权限
+permissions:
+  contents: write
 
 concurrency:
   group: windows-${{ github.ref }}
@@ -228,6 +235,16 @@ jobs:
             LiteVlcPlayer-*-win64.zip
           if-no-files-found: error
           retention-days: 14
+
+      # 只有 tag push 才建 Release；两个工作流各自把本端产物挂到同一个 tag 的 Release 上
+      - name: 发布到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/installer/*.exe
+            LiteVlcPlayer-*-win64.zip
+          generate_release_notes: true
 
       - name: 失败时打印诊断
         if: failure()

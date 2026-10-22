@@ -146,6 +146,17 @@
 
 两者都从 `CMakeLists.txt` 读版本号，所以两端的产物版本永远一致。只有改动 `src/`、`resources/`、`packaging/`、`thirdparty/`、`installer.iss`、`CMakeLists.txt` 才会触发，纯文档提交不跑 CI。
 
+### 发布（Release）
+
+先把重复的版本号统一（`CMakeLists.txt` 的 `project(... VERSION)`、`resources/app.rc` 的 `FILEVERSION`、`installer.iss` 的 `MyAppVersion`、`package.bat` 的 `APPVER`），然后打 tag 推送：
+
+```bash
+git tag v1.1.3
+git push origin v1.1.3
+```
+
+两个工作流在 tag 上各跑一遍，把各自的产物挂到**同一个 Release**：Windows 出 `LiteVlcPlayer-1.1.3-Setup.exe`（外加便携 zip），macOS 出 `LiteVlcPlayer-1.1.3-arm64.dmg`，不需要手动下载再上传。tag push 不受 `paths` 过滤影响，所以发版一定编得出来。只想验证编译、不发版时，推普通提交或用 `workflow_dispatch`，产物留在 Actions 的 Artifacts 里（保留 14 天）。
+
 ### macOS（Apple Silicon）构建
 
 只支持 arm64，**不需要 Mac 真机**——CI 用 GitHub 的 `macos-15`（真 Apple Silicon）编译出 dmg：
@@ -185,3 +196,4 @@
 | `R-261022-0004` | 改进 | 中英双语 README：英文作为主入口，中文版移至 `README.zh-CN.md`，两个文件头部都带 Eng / 中文 切换 |
 | `R-261022-0005` | 改进 | Windows 也进 CI：导入库入库、CMake 新增 SDK 探测分支、`windows.yml` 与 macOS 并排出 Setup.exe + 便携 zip |
 | `R-261022-0006` | 改进 | README 首段后补软件截图（主窗口 + 在线片源搜索） |
+| `R-261022-0007` | 改进 | 打 tag 自动发 Release：一次推送双端出包并挂到同一个 Release |
