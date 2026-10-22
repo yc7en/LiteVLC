@@ -136,6 +136,16 @@ The repository ships a trimmed **LibVLC 3.0.21 (win64) SDK and runtime** under `
 3. CMake copies `libvlc.dll` and `libvlccore.dll` next to the executable after building, and the program locates `vlc/plugins` on startup — just run it.
 4. One-command Windows 11 installer: run `package.bat` in the repository root (requires Inno Setup 6; the script looks for `E:\tools\innosetup\ISCC.exe`, then `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`, or honours the `INNO_SETUP` environment variable).
 
+### CI builds for both platforms
+
+One push to `main` (or a manual `workflow_dispatch`) starts two parallel workflows:
+
+- `windows.yml` → `LiteVlcPlayer-<ver>-Setup.exe` and a portable `LiteVlcPlayer-<ver>-win64.zip`
+  (MinGW build, `windeployqt`, LibVLC runtime, Inno Setup);
+- `macos.yml` → `LiteVlcPlayer-<ver>-arm64.dmg` (see below).
+
+Both read the version from `CMakeLists.txt`, so the two artifacts always carry the same version number. Only commits touching `src/`, `resources/`, `packaging/`, `thirdparty/`, `installer.iss` or `CMakeLists.txt` trigger them — docs-only changes skip CI.
+
 ### macOS (Apple Silicon)
 
 arm64 only — **no Mac hardware required**: CI compiles the dmg on GitHub's `macos-15` runners (real Apple Silicon).
@@ -173,3 +183,4 @@ Convention: **bug fixes** go to `docs/BugFix-YYMMDD-00XX.md`, **feature iteratio
 | `R-261022-0001` | Improvement | Subscription import errors carry statistics (e.g. all N sources are type=3 spiders); mixed configs report how many were skipped |
 | `R-261022-0002` | Feature | macOS (Apple Silicon) support: CMake Apple branch, `.app` bundle with Info.plist and icns, platform branches (always-on-top / data dir / hw decode / fonts), GitHub Actions dmg pipeline |
 | `R-261022-0004` | Improvement | Bilingual README: English as the primary entry, Chinese moved to `README.zh-CN.md`, `Eng / 中文` switch in both headers |
+| `R-261022-0005` | Improvement | Windows joins CI: vendored MinGW import libs, new CMake detection branch, `windows.yml` producing Setup.exe + portable zip alongside the macOS dmg |

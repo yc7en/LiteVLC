@@ -132,6 +132,15 @@
 3. CMake 会在编译完成后自动将 `libvlc.dll` 与 `libvlccore.dll` 拷贝至生成目录，同时程序启动时会自动定位 `vlc/plugins` 插件目录，直接点击运行即可。
 4. 一键打包 Windows 11 安装包：运行仓库根目录的 `package.bat`（需要 Inno Setup 6，脚本会依次找 `E:\tools\innosetup\ISCC.exe`、`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`，或用环境变量 `INNO_SETUP` 指定）。
 
+### CI 双端出包
+
+推一次 `main`（或在 Actions 页面手动 `workflow_dispatch`），两个工作流并行跑：
+
+- `windows.yml` → `LiteVlcPlayer-<版本>-Setup.exe` 与便携版 `LiteVlcPlayer-<版本>-win64.zip`（MinGW 编译 + `windeployqt` + LibVLC 运行时 + Inno Setup）；
+- `macos.yml` → `LiteVlcPlayer-<版本>-arm64.dmg`（见下一节）。
+
+两者都从 `CMakeLists.txt` 读版本号，所以两端的产物版本永远一致。只有改动 `src/`、`resources/`、`packaging/`、`thirdparty/`、`installer.iss`、`CMakeLists.txt` 才会触发，纯文档提交不跑 CI。
+
 ### macOS（Apple Silicon）构建
 
 只支持 arm64，**不需要 Mac 真机**——CI 用 GitHub 的 `macos-15`（真 Apple Silicon）编译出 dmg：
@@ -169,3 +178,4 @@
 | `R-261022-0001` | 改进 | 订阅导入报错带统计（N 个源全是 type=3 Spider 等原因说明），混合配置导入成功时告知跳过数 |
 | `R-261022-0002` | 新功能 | macOS（Apple Silicon）构建支持：CMake Apple 分支、.app bundle + Info.plist + icns、平台分支（置顶/数据目录/硬解/字体）、GitHub Actions 一键出 dmg |
 | `R-261022-0004` | 改进 | 中英双语 README：英文作为主入口，中文版移至 `README.zh-CN.md`，两个文件头部都带 Eng / 中文 切换 |
+| `R-261022-0005` | 改进 | Windows 也进 CI：导入库入库、CMake 新增 SDK 探测分支、`windows.yml` 与 macOS 并排出 Setup.exe + 便携 zip |

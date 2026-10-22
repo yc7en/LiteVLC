@@ -1,0 +1,182 @@
+name: Windows (x64)
+
+# Windows x64：MinGW 构建 + windeployqt + LibVLC 运行时 + Inno Setup 安装包。
+# 与 macos.yml 同一套触发条件，一次 push 两端并行编译，产物都是 Release 附件可用的名字：
+#   LiteVlcPlayer-<ver>-Setup.exe（UpdateService::platformTag() = win-x64）
+#   LiteVlcPlayer-<ver>-arm64.dmg（= macos-arm64，由 macos.yml 产出）
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'packaging/**'
+      - 'thirdparty/**'
+      - 'installer.iss'
+      - 'CMakeLists.txt'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'thirdparty/**'
+      - 'CMakeLists.txt'
+      - 'installer.iss'
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '6.8.0'
+  VLC_VERSION: '3.0.21'
+
+jobs:
+  build:
+    name: Build x64
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 环境信息
+        shell: pwsh
+        run: |
+          cmake --version
+          ninja --version
+          where.exe 7z
+
+      - name: 安装 Qt ${{ env.QT_VERSION }}（MinGW）
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          tools: 'tools_mingw1310'
+          cache: true
+
+      - name: 编译器自检
+        shell: pwsh
+        run: |
+          gcc --version
+          g++ --version
+
+      - name: 下载并解开 VLC（win64）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "vlc-$env:VLC_VERSION-win64.zip"
+          $base = "https://get.videolan.org/vlc/$env:VLC_VERSION/win64"
+          curl.exe -fL --retry 3 -o $zip "$base/$zip"
+          if ($LASTEXITCODE -ne 0) { throw "VLC 下载失败" }
+          Write-Host ("下载完成: {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
+          7z x $zip -y -o. | Select-Object -Last 3
+          if ($LASTEXITCODE -ne 0) { throw "VLC 解压失败" }
+          Move-Item -Path "vlc-$env:VLC_VERSION" -Destination "vlc"
+          Get-ChildItem vlc | Select-Object -ExpandProperty Name
+
+      - name: 组装 VLC SDK 目录（官方 zip 不含 sdk，用仓库内的头文件与导入库）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path vlc\sdk | Out-Null
+          Copy-Item -Recurse -Force thirdparty\vlc\include vlc\sdk\
+          New-Item -ItemType Directory -Force -Path vlc\sdk\lib | Out-Null
+          Copy-Item -Force thirdparty\vlc\lib\win64\*.lib vlc\sdk\lib\
+          if (-not (Test-Path vlc\sdk\include\vlc\vlc.h)) { throw "缺少 vlc.h" }
+          Get-ChildItem vlc\sdk\lib | Select-Object Name, Length
+
+      - name: 读取版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $m = Select-String -Path CMakeLists.txt -Pattern 'project\(LiteVlcPlayer VERSION ([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1
+          if (-not $m) { throw "未能从 CMakeLists.txt 读取版本号" }
+          $v = $m.Matches[0].Groups[1].Value
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "版本: $v"
+
+      - name: 配置
+        shell: pwsh
+        run: |
+          cmake -B build -S . -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=gcc `
+            -DCMAKE_CXX_COMPILER=g++ `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: 编译
+        shell: pwsh
+        run: cmake --build build
+
+      - name: 组装发布目录（windeployqt + LibVLC）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = "dist\LiteVlcPlayer"
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item -Force build\LiteVlcPlayer.exe $out\
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --compiler-runtime --no-translations `
+              --no-system-d3d-compiler --no-opengl-sw --no-quick-import --dir $out "$out\LiteVlcPlayer.exe"
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt 失败" }
+          Copy-Item -Force vlc\libvlc.dll, vlc\libvlccore.dll $out\
+          Copy-Item -Recurse -Force vlc\plugins $out\plugins
+          Write-Host "文件数: $((Get-ChildItem -Recurse -File $out).Count)"
+          Write-Host "体积: $([math]::Round(((Get-ChildItem -Recurse -File $out | Measure-Object Length -Sum).Sum / 1MB), 1)) MB"
+
+      - name: 生成安装包（Inno Setup）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = "${{ steps.ver.outputs.version }}"
+          $iscc = @(
+            "$env:INNO_SETUP",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $iscc) {
+            Write-Host "镜像里没有 Inno Setup，尝试安装 ..."
+            choco install innosetup -y --no-progress
+            $iscc = @(
+              "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+              "C:\Program Files\Inno Setup 6\ISCC.exe"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "找不到 ISCC.exe" }
+          Write-Host "ISCC: $iscc"
+          & $iscc "/DMyAppVersion=$ver" "installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
+          Get-ChildItem dist\installer | Select-Object Name, Length
+
+      - name: 打包便携版 zip
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          Compress-Archive -Path dist\LiteVlcPlayer\* -DestinationPath "LiteVlcPlayer-$ver-win64.zip" -CompressionLevel Optimal
+          Get-Item "LiteVlcPlayer-$ver-win64.zip" | Select-Object Name, Length
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiteVlcPlayer-windows-x64
+          path: |
+            dist/installer/*.exe
+            LiteVlcPlayer-*-win64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 失败时打印诊断
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== CMake 探测结果 ==="
+          Select-String -Path build\CMakeCache.txt -Pattern "VLC_|CMAKE_CXX_COMPILER:" -ErrorAction SilentlyContinue
+          Write-Host "=== 发布目录 ==="
+          Get-ChildItem -Recurse -File dist -ErrorAction SilentlyContinue | Select-Object -First 40 FullName
+          Write-Host "=== exe 依赖 ==="
+          objdump -p build\LiteVlcPlayer.exe 2>$null | Select-String "DLL Name"
