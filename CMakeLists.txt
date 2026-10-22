@@ -174,15 +174,27 @@ target_link_directories(LiteVlcPlayer PRIVATE
     ${VLC_LIB_DIR}
 )
 
-# MSVC 与 MinGW 均兼容链接 libvlc / libvlccore；macOS 上 libvlc 已传递依赖 libvlccore
+# MSVC 与 MinGW 均兼容链接 libvlc / libvlccore；macOS 上 libvlc 已传递依赖 libvlccore。
+# 注意 macOS 不能用裸名 libvlc：ld 会把 -llibvlc 解析成 liblibvlc.dylib（实际文件名是
+# libvlc.dylib），报 "library not found for -llibvlc"，所以这里直接给绝对路径。
 if(APPLE)
+    set(_vlc_dylibs "")
+    foreach(_name libvlc libvlccore)
+        if(EXISTS "${VLC_LIB_DIR}/${_name}.dylib")
+            list(APPEND _vlc_dylibs "${VLC_LIB_DIR}/${_name}.dylib")
+        endif()
+    endforeach()
+    if(NOT _vlc_dylibs)
+        message(FATAL_ERROR "在 ${VLC_LIB_DIR} 下找不到 libvlc.dylib")
+    endif()
+    message(STATUS "Link LibVLC (macOS): ${_vlc_dylibs}")
     target_link_libraries(LiteVlcPlayer PRIVATE
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
         Qt6::Svg
         Qt6::Network
-        libvlc
+        ${_vlc_dylibs}
     )
 else()
     target_link_libraries(LiteVlcPlayer PRIVATE

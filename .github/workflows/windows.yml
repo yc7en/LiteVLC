@@ -70,12 +70,35 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $zip = "vlc-$env:VLC_VERSION-win64.zip"
-          $base = "https://get.videolan.org/vlc/$env:VLC_VERSION/win64"
-          curl.exe -fL --retry 3 -o $zip "$base/$zip"
-          if ($LASTEXITCODE -ne 0) { throw "VLC 下载失败" }
+          $urls = @(
+            "https://get.videolan.org/vlc/$env:VLC_VERSION/win64/$zip",
+            "https://download.videolan.org/pub/videolan/vlc/$env:VLC_VERSION/win64/$zip"
+          )
+          Write-Host "curl: $((curl.exe --version | Select-Object -First 1))"
+          $ok = $false
+          foreach ($u in $urls) {
+            Write-Host "尝试下载: $u"
+            curl.exe -fL --retry 2 --max-time 300 -o $zip $u
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $zip)) { $ok = $true; break }
+            Write-Host "失败 exit=$LASTEXITCODE"
+          }
+          if (-not $ok) {
+            Write-Host "::error title=VLC 下载失败::地址 $($urls -join ' ; ') | 最后 exit=$LASTEXITCODE"
+            throw "VLC 下载失败"
+          }
           Write-Host ("下载完成: {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
+
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
+          if (-not $sevenZip) { $sevenZip = "C:\Program Files\7-Zip\7z.exe" }
+          if (-not (Test-Path $sevenZip)) {
+            Write-Host "::error title=找不到 7z::既不在 PATH 也不在 C:\Program Files\7-Zip"
+            throw "找不到 7z"
+          }
           7z x $zip -y -o. | Select-Object -Last 3
-          if ($LASTEXITCODE -ne 0) { throw "VLC 解压失败" }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error title=VLC 解压失败::7z exit=$LASTEXITCODE"
+            throw "VLC 解压失败"
+          }
           Move-Item -Path "vlc-$env:VLC_VERSION" -Destination "vlc"
           Get-ChildItem vlc | Select-Object -ExpandProperty Name
 
@@ -192,8 +215,13 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "=== CMake 探测结果 ==="
-          Select-String -Path build\CMakeCache.txt -Pattern "VLC_|CMAKE_CXX_COMPILER:" -ErrorAction SilentlyContinue
+          if (Test-Path build\CMakeCache.txt) {
+            Select-String -Path build\CMakeCache.txt -Pattern "VLC_|CMAKE_CXX_COMPILER:" | ForEach-Object { Write-Host $_.Line }
+          }
           Write-Host "=== 发布目录 ==="
-          Get-ChildItem -Recurse -File dist -ErrorAction SilentlyContinue | Select-Object -First 40 FullName
+          Get-ChildItem -Recurse -File dist -ErrorAction SilentlyContinue | Select-Object -First 40 -ExpandProperty FullName
           Write-Host "=== exe 依赖 ==="
-          objdump -p build\LiteVlcPlayer.exe 2>$null | Select-String "DLL Name"
+          if (Test-Path build\LiteVlcPlayer.exe) {
+            & objdump -p build\LiteVlcPlayer.exe 2>$null | Select-String "DLL Name"
+          }
+          exit 0
