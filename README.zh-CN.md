@@ -198,3 +198,4 @@ git push origin v1.1.3
 | `R-261022-0006` | 改进 | README 首段后补软件截图（主窗口 + 在线片源搜索） |
 | `R-261022-0007` | 改进 | 打 tag 自动发 Release：一次推送双端出包并挂到同一个 Release |
 | `R-261022-0008` | 新功能 | 自动字幕 + 自动翻译（计划）：本地 ASR（sherpa-onnx/SenseVoice 主，whisper.cpp 兜底）+ llama.cpp 翻译 + 自绘字幕层；音频按源类型分流（本地预转码 / 网络分块预取 / 直播 dump） |
+| `R-261022-0009` | 新功能 | 支持 Intel Mac：macOS CI 矩阵化，`macos-15-intel` 与 arm64 并列出 x86_64 包；dmg 名带完整平台标签（macos-arm64 / macos-x64），更新可按架构匹配资产 |

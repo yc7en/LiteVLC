@@ -11,7 +11,8 @@ set(CMAKE_AUTOUIC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network)
 
 # ==============================================================================
-# 平台默认值：macOS 只出 Apple Silicon（arm64）版本
+# 平台默认值：macOS 默认出 Apple Silicon（arm64）版本；x86_64（Intel Mac）由 CI
+# 矩阵显式传 -DCMAKE_OSX_ARCHITECTURES=x86_64（见 .github/workflows/macos.yml）
 # ==============================================================================
 if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "macOS target architecture" FORCE)

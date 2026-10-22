@@ -203,3 +203,4 @@ Convention: **bug fixes** go to `docs/BugFix-YYMMDD-00XX.md`, **feature iteratio
 | `R-261022-0006` | Improvement | Add app screenshots (main window + online source search) to both READMEs after the intro |
 | `R-261022-0007` | Improvement | Tag-triggered releases: pushing `v*` builds both platforms and attaches Setup.exe + dmg to one Release |
 | `R-261022-0008` | Feature | Auto subtitles + auto translation (planned): local ASR via sherpa-onnx/SenseVoice with whisper.cpp fallback, llama.cpp MT, self-drawn overlay; audio acquisition split by source type (local pre-transcode / network chunked pre-fetch / live dump) |
+| `R-261022-0009` | Feature | Intel Mac support: macOS CI matrix builds x86_64 on `macos-15-intel` alongside arm64; dmg named with the full platform tag (`macos-arm64` / `macos-x64`) so updates can match assets per architecture |

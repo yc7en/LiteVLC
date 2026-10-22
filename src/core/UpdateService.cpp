@@ -21,7 +21,11 @@ QString UpdateService::currentVersion()
 QString UpdateService::platformTag()
 {
 #if defined(Q_OS_MAC)
+#if defined(Q_PROCESSOR_X86_64)
+    return QStringLiteral("macos-x64");
+#else
     return QStringLiteral("macos-arm64");
+#endif
 #elif defined(Q_OS_WIN)
     return QStringLiteral("win-x64");
 #else

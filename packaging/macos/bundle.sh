@@ -2,7 +2,11 @@
 # macOS 打包：把 VLC 的 lib 与 plugins 塞进 .app，修 install_name，做 ad-hoc 签名，出 dmg
 #
 # 用法：
-#   packaging/macos/bundle.sh <LiteVlcPlayer.app> <VLC.app 的 Contents/MacOS 目录> [输出版本号]
+#   packaging/macos/bundle.sh <LiteVlcPlayer.app> <VLC.app 的 Contents/MacOS 目录> [输出版本号] [架构]
+#
+# 架构：arm64（默认）/ x86_64 / x64。架构自检按目标架构过滤；
+# dmg 名带完整平台标签（macos-arm64 / macos-x64），与 UpdateService::platformTag()
+# 保持一致——更新功能接入时按 platformTag 子串匹配 Release 资产。
 #
 # 为什么保持 VLC.app 内部的相对布局（MacOS/lib、MacOS/plugins）：
 #   这样 libvlc / 插件的相对路径假设与它们在 VLC.app 里完全一致，不用逐个 guessing 改写。
@@ -13,6 +17,14 @@ set -euo pipefail
 APP="${1:?用法: bundle.sh <LiteVlcPlayer.app> <VLC.app/Contents/MacOS> [version]}"
 VLC_MACOS="${2:?缺少 VLC.app/Contents/MacOS 路径}"
 VERSION="${3:-0.0.0}"
+ARCH="${4:-arm64}"
+case "$ARCH" in
+    arm64|x86_64|x64) ;;
+    *) echo "未知架构: $ARCH（可选 arm64 / x86_64 / x64）"; exit 1 ;;
+esac
+# lipo -archs 的输出是 x86_64；x64 只是发布短名，自检时归一
+EXPECT_ARCH="$ARCH"
+if [ "$EXPECT_ARCH" = "x64" ]; then EXPECT_ARCH="x86_64"; fi
 
 MACOS_DIR="$APP/Contents/MacOS"
 LIB_DST="$MACOS_DIR/lib"
@@ -66,19 +78,19 @@ while IFS= read -r -d '' plugin; do
 done < <(find "$PLUGIN_DST" -type f -name '*.dylib' -print0)
 echo "    插件数: $PLUGIN_COUNT"
 
-# ---------- 3. 架构自检：只允许 arm64 ----------
-echo "==> 架构自检（arm64）"
+# ---------- 3. 架构自检：只允许目标架构 ----------
+echo "==> 架构自检（$EXPECT_ARCH）"
 BAD_ARCH=0
 while IFS= read -r -d '' bin; do
     archs="$(lipo -archs "$bin" 2>/dev/null || echo unknown)"
     case "$archs" in
-        *arm64*) ;;
-        *) echo "    非 arm64: $bin ($archs)"; BAD_ARCH=1 ;;
+        *"$EXPECT_ARCH"*) ;;
+        *) echo "    非 $EXPECT_ARCH: $bin ($archs)"; BAD_ARCH=1 ;;
     esac
 done < <(find "$APP/Contents" -type f \( -name '*.dylib' -o -perm -100 \) -print0)
 
 if [ "$BAD_ARCH" -ne 0 ]; then
-    echo "存在非 arm64 二进制，已中止（Apple Silicon 版本必须全部 arm64）"
+    echo "存在非 $EXPECT_ARCH 二进制，已中止（本包必须全部 $EXPECT_ARCH）"
     exit 2
 fi
 echo "    通过"
@@ -96,7 +108,7 @@ codesign --verify --deep --strict "$APP" && echo "    签名有效"
 # ---------- 5. dmg ----------
 if [ "${MAKE_DMG:-1}" = "1" ]; then
     OUT_DIR="$(cd "$(dirname "$APP")" && pwd)"
-    DMG="$OUT_DIR/LiteVlcPlayer-${VERSION}-arm64.dmg"
+    DMG="$OUT_DIR/LiteVlcPlayer-${VERSION}-macos-${ARCH}.dmg"
     echo "==> 生成 dmg: $DMG"
     rm -rf "$OUT_DIR/dmg-stage"
     mkdir -p "$OUT_DIR/dmg-stage"
