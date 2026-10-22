@@ -169,7 +169,13 @@ jobs:
         if: failure()
         run: |
           [ -f bundle.log ] || exit 0
-          MSG="$(tail -15 bundle.log | tr '\n' '~' | cut -c1-3000)"
+          echo "=== bash 版本 ==="
+          bash --version | head -1
+          echo "=== 错误相关行 ==="
+          grep -nE "bundle\.sh: line|[Ee]rror|unbound|not found|No such|中止|失败" bundle.log | head -8 || true
+          echo "=== CI 上 bundle.sh 的关键行 ==="
+          awk 'NR==20||NR==26||NR==82 {printf "%d: %s\n", NR, $0}' packaging/macos/bundle.sh
+          MSG="$(tail -3 bundle.log | tr '\n' '~')"
           echo "::error title=macOS 打包失败（${{ matrix.pkg_arch }}）::${MSG}"
           exit 0
 
