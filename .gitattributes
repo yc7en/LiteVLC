@@ -1,0 +1,21 @@
+# 行尾策略：脚本类必须 LF，否则 macOS/Linux 上会报 "bad interpreter: /bin/bash^M"
+* text=auto
+
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.plist.in      text eol=lf
+*.md            text eol=lf
+*.cpp           text eol=lf
+*.h             text eol=lf
+*.mm            text eol=lf
+
+# Windows 侧工具链要求 CRLF / 二进制
+*.bat           text eol=crlf
+*.rc            text eol=crlf
+*.iss           text eol=crlf
+*.ico           binary
+*.icns          binary
+*.png           binary
+*.dll           binary
+*.lib           binary
