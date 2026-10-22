@@ -236,7 +236,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # 只有 tag push 才建 Release；两个工作流各自把本端产物挂到同一个 tag 的 Release 上
+      # 只有 tag push 才建 Release；两个工作流各自把本端产物挂到同一个 tag 的 Release 上。
+      # 说明正文由 macos.yml 那边生成（generate_release_notes），这边只负责传文件，
+      # 两边都开会在 Release 正文里写出两份重复的 changelog。
       - name: 发布到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -244,7 +246,7 @@ jobs:
           files: |
             dist/installer/*.exe
             LiteVlcPlayer-*-win64.zip
-          generate_release_notes: true
+          generate_release_notes: false
 
       - name: 失败时打印诊断
         if: failure()
