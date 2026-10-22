@@ -142,15 +142,18 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          if (Test-Path build.log) {
-            $errs = Select-String -Path build.log -Pattern 'error:|fatal error|CMake Error' | Select-Object -First 6
-            $msg = ($errs | ForEach-Object { $_.Line.Trim() }) -join ' ~ '
-            if ($msg) {
-              $short = $msg.Substring(0, [Math]::Min(900, $msg.Length))
-              Write-Host "::error title=Windows 编译失败::$short"
-            }
-            Get-Content build.log -Tail 40
+          if (-not (Test-Path build.log)) {
+            Write-Host "::error title=Windows 编译失败::没有生成 build.log"
+            exit 0
           }
+          $lines = Get-Content build.log
+          Write-Host "日志行数: $($lines.Count)"
+          $errs = $lines | Where-Object { $_ -match 'error:|fatal error|CMake Error|FAILED:' } | Select-Object -First 8
+          if (-not $errs) { $errs = Get-Content build.log -Tail 30 }
+          $msg = ($errs | ForEach-Object { "$_".Trim() }) -join ' ~ '
+          $short = $msg.Substring(0, [Math]::Min(3800, $msg.Length))
+          Write-Host "::error title=Windows 编译失败::$short"
+          Get-Content build.log -Tail 40
 
       - name: 组装发布目录（windeployqt + LibVLC）
         shell: pwsh
