@@ -177,7 +177,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/*.dmg
-          generate_release_notes: true
+          # 矩阵下两个 job 都会跑本步骤，说明正文只让 arm64 那条生成，
+          # 否则 Release body 会出现两份重复的 changelog
+          generate_release_notes: ${{ matrix.pkg_arch == 'arm64' }}
 
       - name: 失败时打印 bundle 结构
         if: failure()

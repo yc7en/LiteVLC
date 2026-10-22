@@ -156,11 +156,11 @@ Both read the version from `CMakeLists.txt`, so the two artifacts always carry t
 Bump the version everywhere it is duplicated (`project(... VERSION)` in `CMakeLists.txt`, `FILEVERSION` in `resources/app.rc`, `MyAppVersion` in `installer.iss`, `APPVER` in `package.bat`), then push a tag:
 
 ```bash
-git tag v1.1.3
-git push origin v1.1.3
+git tag v1.1.4
+git push origin v1.1.4
 ```
 
-Both workflows run on the tag and attach their own artifact to the same Release: `LiteVlcPlayer-1.1.3-Setup.exe` (plus a portable zip) from Windows, `LiteVlcPlayer-1.1.3-arm64.dmg` from macOS. No manual download-and-upload step. Tag pushes bypass the `paths` filter, so the release always builds. To just verify a build without releasing, push a normal commit or use `workflow_dispatch` — artifacts then stay in Actions for 14 days.
+Both workflows run on the tag and attach their own artifact to the same Release: `LiteVlcPlayer-1.1.4-Setup.exe` (plus a portable zip) from Windows, `LiteVlcPlayer-1.1.4-macos-arm64.dmg` and `LiteVlcPlayer-1.1.4-macos-x64.dmg` from macOS. No manual download-and-upload step. Tag pushes bypass the `paths` filter, so the release always builds. To just verify a build without releasing, push a normal commit or use `workflow_dispatch` — artifacts then stay in Actions for 14 days.
 
 ### macOS (Apple Silicon)
 
@@ -173,7 +173,7 @@ arm64 only — **no Mac hardware required**: CI compiles the dmg on GitHub's `ma
    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
    cmake --build build
    "$(brew --prefix qt)/bin/macdeployqt" build/LiteVlcPlayer.app -always-overwrite
-   packaging/macos/bundle.sh build/LiteVlcPlayer.app vlc/VLC.app/Contents/MacOS 1.1.3
+   packaging/macos/bundle.sh build/LiteVlcPlayer.app vlc/VLC.app/Contents/MacOS 1.1.4
    ```
 4. Builds are ad-hoc signed (no Apple Developer certificate), so on first launch use **right-click → Open**, or run `xattr -dr com.apple.quarantine /Applications/LiteVlcPlayer.app`; the dmg includes these instructions.
 5. Configuration lives in `~/Library/Application Support/LiteVlcPlayer/` on macOS — never inside the `.app`, which would break the code-signing seal.
