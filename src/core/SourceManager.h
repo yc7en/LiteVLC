@@ -36,6 +36,16 @@ struct SourceSite
     QString effectiveReferer() const;
 };
 
+/** 订阅解析统计：让界面能把「为什么没导入 / 少导入了」讲清楚 */
+struct ParseStats
+{
+    int totalSites = 0;      // sites 数组里的对象条目数
+    int spiderSkipped = 0;   // type=3（csp_*/js/py，需要 jar 等运行时）
+    int otherSkipped = 0;    // 其他不支持的形态（type 非 0/1/3、api 无效等）
+    int imported = 0;        // 解析为可用 CMS 接口的条数
+    bool isEmpty() const { return totalSites == 0; }
+};
+
 /**
  * @brief 在线源配置管理（sources.json，与 player_config.json 同目录）
  *
@@ -67,11 +77,14 @@ public:
 
     QString configFilePath() const;
 
-    /** 解析订阅 JSON（顶层对象含 sites，或直接是数组）；失败返回空并写 error */
-    static QList<SourceSite> parseSubscription(const QByteArray &json, QString *error);
+    /** 解析订阅 JSON（顶层对象含 sites，或直接是数组）；失败返回空并写 error。
+     *  stats 可选：回填跳过/导入统计，供界面提示「为什么没导入」。 */
+    static QList<SourceSite> parseSubscription(const QByteArray &json, QString *error,
+                                               ParseStats *stats = nullptr);
 
     /** 导入订阅；replaceExisting=true 表示全量替换。返回导入条数 */
-    int importSubscription(const QByteArray &json, bool replaceExisting, QString *error);
+    int importSubscription(const QByteArray &json, bool replaceExisting, QString *error,
+                           ParseStats *stats = nullptr);
 
 private:
     SourceManager();

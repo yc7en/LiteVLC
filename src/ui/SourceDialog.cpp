@@ -828,7 +828,8 @@ void SourceDialog::onImportFromClipboard()
 void SourceDialog::importPayload(const QByteArray &payload, const QString &origin)
 {
     QString error;
-    const int count = SourceManager::instance().importSubscription(payload, false, &error);
+    ParseStats stats;
+    const int count = SourceManager::instance().importSubscription(payload, false, &error, &stats);
 
     if (count <= 0) {
         QMessageBox::warning(this, QStringLiteral("导入失败"),
@@ -841,13 +842,29 @@ void SourceDialog::importPayload(const QByteArray &payload, const QString &origi
     reloadSiteTable();
     reloadSiteCombo();
 
+    // 混合配置：可用源已导入，同时告知跳过了哪些，免得用户疑惑「少了一半」
+    QString extra;
+    if (stats.spiderSkipped > 0 || stats.otherSkipped > 0) {
+        QStringList skipped;
+        if (stats.spiderSkipped > 0) {
+            skipped << QStringLiteral("%1 个 Spider 脚本源（type=3，需 jar 运行时）").arg(stats.spiderSkipped);
+        }
+        if (stats.otherSkipped > 0) {
+            skipped << QStringLiteral("%1 个其他不支持源").arg(stats.otherSkipped);
+        }
+        extra = QStringLiteral("\n\n另有 %1 个源未导入：%2。")
+                    .arg(stats.spiderSkipped + stats.otherSkipped)
+                    .arg(skipped.join(QStringLiteral("，")));
+    }
+
     QMessageBox::information(
         this,
         QStringLiteral("导入完成"),
-        QStringLiteral("已从 %1 导入 %2 个可用片源。\n\n"
+        QStringLiteral("已从 %1 导入 %2 个可用片源。%3\n\n"
                        "现在回到「在线搜索」页即可搜索播放。")
             .arg(origin)
-            .arg(count));
+            .arg(count)
+            .arg(extra));
 }
 
 void SourceDialog::onRemoveSite()

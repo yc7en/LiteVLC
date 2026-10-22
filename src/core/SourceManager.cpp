@@ -281,9 +281,14 @@ const SourceSite *SourceManager::findSite(const QString &key) const
     return nullptr;
 }
 
-QList<SourceSite> SourceManager::parseSubscription(const QByteArray &json, QString *error)
+QList<SourceSite> SourceManager::parseSubscription(const QByteArray &json, QString *error,
+                                                   ParseStats *stats)
 {
     QList<SourceSite> result;
+    ParseStats localStats;
+    ParseStats &st = stats ? *stats : localStats;
+    st = ParseStats();
+
     QByteArray payload = json.trimmed();
 
     QJsonParseError parseError{};
@@ -339,6 +344,7 @@ QList<SourceSite> SourceManager::parseSubscription(const QByteArray &json, QStri
         if (!value.isObject()) {
             continue;
         }
+        ++st.totalSites;
         const QJsonObject obj = value.toObject();
 
         SourceSite site;
@@ -357,8 +363,14 @@ QList<SourceSite> SourceManager::parseSubscription(const QByteArray &json, QStri
 
         // 不带协议的 api 一般是 csp_xxx / 本地 js 之类的脚本源，本播放器没有脚本运行时
         if (!site.isCmsSupported()) {
+            if (site.type == 3) {
+                ++st.spiderSkipped;
+            } else {
+                ++st.otherSkipped;
+            }
             continue;
         }
+        ++st.imported;
 
         site.searchable  = boolFlag(obj, QStringLiteral("searchable"), true);
         site.quickSearch = boolFlag(obj, QStringLiteral("quickSearch"), true);
@@ -383,15 +395,27 @@ QList<SourceSite> SourceManager::parseSubscription(const QByteArray &json, QStri
     }
 
     if (result.isEmpty() && error && error->isEmpty()) {
-        *error = QStringLiteral("配置里没有可用的接口源（只支持 type=0/1 的苹果 CMS 接口，"
-                                "jar/js/py 脚本 Spider 源需要额外运行时，本播放器未内置）");
+        // 把统计讲清楚：用户才知道是配置里压根没有 type=0/1 接口，不是软件坏了
+        QStringList lines;
+        lines << QStringLiteral("该配置共有 %1 个源，没有一个是可用的 type=0/1 苹果 CMS 接口：")
+                     .arg(st.totalSites);
+        if (st.spiderSkipped > 0) {
+            lines << QStringLiteral("· %1 个 type=3 Spider 源（csp_* 脚本，需要 TVBox 的 jar 运行时，本播放器未内置）")
+                         .arg(st.spiderSkipped);
+        }
+        if (st.otherSkipped > 0) {
+            lines << QStringLiteral("· %1 个其他不支持形态的源").arg(st.otherSkipped);
+        }
+        lines << QStringLiteral("建议换用提供 type=0（XML）/ type=1（JSON）接口的订阅配置。");
+        *error = lines.join(QLatin1Char('\n'));
     }
     return result;
 }
 
-int SourceManager::importSubscription(const QByteArray &json, bool replaceExisting, QString *error)
+int SourceManager::importSubscription(const QByteArray &json, bool replaceExisting, QString *error,
+                                      ParseStats *stats)
 {
-    const QList<SourceSite> parsed = parseSubscription(json, error);
+    const QList<SourceSite> parsed = parseSubscription(json, error, stats);
     if (parsed.isEmpty()) {
         return 0;
     }
