@@ -85,7 +85,20 @@ jobs:
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
 
       - name: 编译
-        run: cmake --build build --parallel
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      # 编译失败时把错误行转成注解：注解走公开 API 就能读，不用登进 Actions 页面翻日志
+      - name: 汇总编译错误
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/build.log"
+          [ -f "$LOG" ] || exit 0
+          MSG="$(grep -E 'error:|fatal error|CMake Error|Error [0-9]' "$LOG" | head -6 | tr '\n' '~' | cut -c1-900)"
+          [ -n "$MSG" ] && echo "::error title=macOS 编译失败::${MSG}"
+          tail -40 "$LOG"
+          exit 0
 
       - name: 打包 Qt 依赖
         run: |
