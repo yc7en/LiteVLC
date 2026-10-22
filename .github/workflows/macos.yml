@@ -156,12 +156,22 @@ jobs:
 
       - name: 塞入 VLC + 修路径 + ad-hoc 签名
         run: |
+          set -o pipefail
           chmod +x packaging/macos/bundle.sh
           packaging/macos/bundle.sh \
             "build/LiteVlcPlayer.app" \
             "vlc/VLC.app/Contents/MacOS" \
             "${{ steps.ver.outputs.version }}" \
-            "${{ matrix.pkg_arch }}"
+            "${{ matrix.pkg_arch }}" 2>&1 | tee bundle.log
+
+      # bundle.sh 失败时把末尾输出转成注解，便于从公开 API 定位
+      - name: 打包失败汇总
+        if: failure()
+        run: |
+          [ -f bundle.log ] || exit 0
+          MSG="$(tail -15 bundle.log | tr '\n' '~' | cut -c1-3000)"
+          echo "::error title=macOS 打包失败（${{ matrix.pkg_arch }}）::${MSG}"
+          exit 0
 
       - name: 上传 dmg
         uses: actions/upload-artifact@v4
