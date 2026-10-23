@@ -158,25 +158,31 @@ jobs:
         run: |
           set -o pipefail
           chmod +x packaging/macos/bundle.sh
-          packaging/macos/bundle.sh \
+          # 临时带上 -x 跟踪：CI 上 bundle.sh 的报错尾巴会被截断，
+          # 有 PS4 行号就能看到出错前实际执行了哪条命令。稳定后可去掉 -x。
+          export PS4='+[$LINENO] '
+          bash -x packaging/macos/bundle.sh \
             "build/LiteVlcPlayer.app" \
             "vlc/VLC.app/Contents/MacOS" \
             "${{ steps.ver.outputs.version }}" \
             "${{ matrix.pkg_arch }}" 2>&1 | tee bundle.log
 
-      # bundle.sh 失败时把末尾输出转成注解，便于从公开 API 定位
+      # bundle.sh 失败时把关键信息转成注解，便于从公开 API 定位
       - name: 打包失败汇总
         if: failure()
         run: |
+          echo "=== bash: $(bash --version | head -1) ==="
+          echo "=== 环境里的 ARCH ==="
+          env | grep -iE '^(ARCH|EXPECT_ARCH)=' || echo "（无）"
+          echo "=== bundle.sh 关键行 ==="
+          sed -n '19,27p;86,96p' packaging/macos/bundle.sh
           [ -f bundle.log ] || exit 0
-          echo "=== bash 版本 ==="
-          bash --version | head -1
-          echo "=== 错误相关行 ==="
-          grep -nE "bundle\.sh: line|[Ee]rror|unbound|not found|No such|中止|失败" bundle.log | head -8 || true
-          echo "=== CI 上 bundle.sh 的关键行 ==="
-          awk 'NR==20||NR==26||NR==82 {printf "%d: %s\n", NR, $0}' packaging/macos/bundle.sh
-          MSG="$(tail -3 bundle.log | tr '\n' '~')"
-          echo "::error title=macOS 打包失败（${{ matrix.pkg_arch }}）::${MSG}"
+          echo "=== bundle.log（共 $(wc -l < bundle.log) 行，全量打印供网页端查看）==="
+          sed 's/^/  | /' bundle.log
+          # 注解优先放「错误行」本身，日志尾巴只作兜底
+          ERR="$(grep -nE 'bundle\.sh: line|中止:|unbound|command not found|非 (arm64|x86_64)|No such file' bundle.log | head -3 | tr '\n' '~' || true)"
+          [ -n "$ERR" ] || ERR="$(tail -2 bundle.log | tr '\n' '~' || true)"
+          echo "::error title=macOS 打包失败（${{ matrix.pkg_arch }}）::${ERR}"
           exit 0
 
       - name: 上传 dmg

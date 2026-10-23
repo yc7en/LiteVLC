@@ -199,3 +199,4 @@ git push origin v1.1.4
 | `R-261022-0007` | 改进 | 打 tag 自动发 Release：一次推送双端出包并挂到同一个 Release |
 | `R-261022-0008` | 新功能 | 自动字幕 + 自动翻译（计划）：本地 ASR（sherpa-onnx/SenseVoice 主，whisper.cpp 兜底）+ llama.cpp 翻译 + 自绘字幕层；音频按源类型分流（本地预转码 / 网络分块预取 / 直播 dump） |
 | `R-261022-0009` | 新功能 | 支持 Intel Mac：macOS CI 矩阵化，`macos-15-intel` 与 arm64 并列出 x86_64 包；dmg 名带完整平台标签（macos-arm64 / macos-x64），更新可按架构匹配资产 |
+| `R-261022-0010` | 缺陷修复 | v1.1.4 的 macOS 打包挂在架构自检（bash 3.2 runner 上 `EXPECT_ARCH` 被当作未定义，且报错尾巴被截断）：期望架构改为在使用点就地推导，新增 `ERR` trap 打印行号与命令，CI 改为外递真实错误行而非日志尾巴 |

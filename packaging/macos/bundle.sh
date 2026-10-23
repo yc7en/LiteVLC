@@ -14,6 +14,10 @@
 
 set -euo pipefail
 
+# 失败时把「哪一行、哪条命令」打出来。CI 上拿到的报错尾巴常被截断，
+# 有了这一行至少能知道死在哪条命令上（$BASH_COMMAND 是 trap 触发时的命令）。
+trap 'rc=$?; echo "!! 中止: 第 $LINENO 行, 命令 [$BASH_COMMAND], 退出码 $rc" >&2' ERR
+
 APP="${1:?用法: bundle.sh <LiteVlcPlayer.app> <VLC.app/Contents/MacOS> [version]}"
 VLC_MACOS="${2:?缺少 VLC.app/Contents/MacOS 路径}"
 VERSION="${3:-0.0.0}"
@@ -22,9 +26,6 @@ case "$ARCH" in
     arm64|x86_64|x64) ;;
     *) echo "未知架构: $ARCH（可选 arm64 / x86_64 / x64）"; exit 1 ;;
 esac
-# lipo -archs 的输出是 x86_64；x64 只是发布短名，自检时归一
-EXPECT_ARCH="$ARCH"
-if [ "$EXPECT_ARCH" = "x64" ]; then EXPECT_ARCH="x86_64"; fi
 
 MACOS_DIR="$APP/Contents/MacOS"
 LIB_DST="$MACOS_DIR/lib"
@@ -33,6 +34,7 @@ PLUGIN_DST="$MACOS_DIR/plugins"
 echo "==> app:    $APP"
 echo "==> vlc:    $VLC_MACOS"
 echo "==> 版本:   $VERSION"
+echo "==> 架构:   $ARCH (bash $BASH_VERSION)"
 
 [ -d "$APP" ] || { echo "找不到 bundle: $APP"; exit 1; }
 [ -f "$VLC_MACOS/lib/libvlc.dylib" ] || { echo "找不到 libvlc.dylib: $VLC_MACOS/lib"; exit 1; }
@@ -79,18 +81,27 @@ done < <(find "$PLUGIN_DST" -type f -name '*.dylib' -print0)
 echo "    插件数: $PLUGIN_COUNT"
 
 # ---------- 3. 架构自检：只允许目标架构 ----------
-echo "==> 架构自检（$EXPECT_ARCH）"
+# 期望架构在本段就地由 ARCH 推导，不沿用脚本前段设置过的变量。
+# 原因：GitHub macOS runner（/bin/bash 3.2）上曾出现「第 82 行 EXPECT_ARCH unbound」，
+# 而该变量在此之前已赋值；同一脚本在 bash 5.x 下完全正常。改为就地推导 +
+# 显式打印实际值，既绕开这类跨段状态问题，也让下次真出错时能一眼看到取值。
+case "${ARCH:-arm64}" in
+    x64|x86_64) ARCH_EXPECTED="x86_64" ;;
+    arm64)      ARCH_EXPECTED="arm64"  ;;
+    *)          ARCH_EXPECTED="${ARCH}" ;;
+esac
+echo "==> 架构自检: 期望 $ARCH_EXPECTED"
 BAD_ARCH=0
 while IFS= read -r -d '' bin; do
     archs="$(lipo -archs "$bin" 2>/dev/null || echo unknown)"
     case "$archs" in
-        *"$EXPECT_ARCH"*) ;;
-        *) echo "    非 $EXPECT_ARCH: $bin ($archs)"; BAD_ARCH=1 ;;
+        *"$ARCH_EXPECTED"*) ;;
+        *) echo "    非 $ARCH_EXPECTED: $bin ($archs)"; BAD_ARCH=1 ;;
     esac
 done < <(find "$APP/Contents" -type f \( -name '*.dylib' -o -perm -100 \) -print0)
 
 if [ "$BAD_ARCH" -ne 0 ]; then
-    echo "存在非 $EXPECT_ARCH 二进制，已中止（本包必须全部 $EXPECT_ARCH）"
+    echo "存在非 $ARCH_EXPECTED 二进制，已中止（本包必须全部 $ARCH_EXPECTED）"
     exit 2
 fi
 echo "    通过"
