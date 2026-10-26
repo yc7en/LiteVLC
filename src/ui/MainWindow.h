@@ -50,6 +50,8 @@ private slots:
     void onSetStayOnTop(bool onTop);
     void onOpenSettings();
     void onOpenOnlineSearch();
+    /** 打开在线片源窗口并切到「直播」页 */
+    void onOpenLiveChannels();
     void onCheckUpdate();
     void onAbout();
 

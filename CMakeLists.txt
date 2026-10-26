@@ -103,6 +103,10 @@ set(PROJECT_SOURCES
     src/core/ConfigManager.cpp
     src/core/SourceManager.h
     src/core/SourceManager.cpp
+    src/core/LiveParser.h
+    src/core/LiveParser.cpp
+    src/core/LiveClient.h
+    src/core/LiveClient.cpp
     src/core/CmsClient.h
     src/core/CmsClient.cpp
     src/core/StreamProbe.h

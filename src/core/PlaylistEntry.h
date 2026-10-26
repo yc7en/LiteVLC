@@ -26,6 +26,8 @@ struct PlaylistEntry
     QString subtitle;    // 辅助信息（在线为来源站名，本地为空）
     QString userAgent;   // 仅 Online 有效
     QString referer;     // 仅 Online 有效
+    /** 直播条目：清单是滑动窗口，不能走 HLS 本地中继（中继会缓存清单，直播会卡死） */
+    bool live = false;
 
     bool isValid() const { return !location.isEmpty(); }
     bool isOnline() const { return kind == Online; }
@@ -43,7 +45,8 @@ struct PlaylistEntry
                                     const QString &displayName,
                                     const QString &sourceName,
                                     const QString &ua,
-                                    const QString &ref)
+                                    const QString &ref,
+                                    bool isLive = false)
     {
         PlaylistEntry entry;
         entry.kind = Online;
@@ -52,6 +55,7 @@ struct PlaylistEntry
         entry.subtitle = sourceName;
         entry.userAgent = ua;
         entry.referer = ref;
+        entry.live = isLive;
         return entry;
     }
 };

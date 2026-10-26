@@ -6,6 +6,7 @@
 #include <QSet>
 
 #include "core/CmsClient.h"
+#include "core/LiveParser.h"
 #include "core/PlaylistEntry.h"
 
 class QComboBox;
@@ -16,22 +17,25 @@ class QListWidgetItem;
 class QNetworkAccessManager;
 class QPushButton;
 class QShowEvent;
+class QTabWidget;
 class QTableWidget;
 class QTableWidgetItem;
 class QTextBrowser;
 class QNetworkReply;
+class LiveClient;
 
 /**
  * @brief 在线片源对话框
  *
- * 两个页签：
+ * 三个页签：
  *  1. 在线搜索 —— 选源 / 输入关键词 / 多源并发搜索 / 选片 / 选线路与剧集 / 播放或加入播放列表
- *  2. 源配置   —— 导入 TVBox 订阅（链接 / 文件 / 剪贴板）、启用停用、删除
+ *  2. 源配置   —— 导入 TVBox 订阅（链接 / 文件 / 剪贴板）、启用停用、删除（点播源与直播源）
+ *  3. 直播     —— 拉取 TVBox 配置里的 lives（m3u / txt），按分组浏览频道、双击播放
  *
  * 窗口是**非模态**的：开着它也可以照常操作主窗口（暂停、拖进度、切下一集）。
  * 选好剧集后点「播放」只把条目交给主窗口，自身不关闭，方便连着挑好几部。
  *
- * 只对接苹果 CMS 的 type 0/1 接口；脚本 Spider（jar/js/py）不在本轮范围内。
+ * 点播只对接苹果 CMS 的 type 0/1 接口；脚本 Spider（jar/js/py）不在本轮范围内。
  */
 class SourceDialog : public QDialog
 {
@@ -41,6 +45,8 @@ public:
 
     /** 打开时把焦点放到关键词输入框 */
     void focusSearchInput();
+    /** 切到直播页；缓存里已有频道时不再重复拉取 */
+    void focusLiveTab();
 
 protected:
     void done(int result) override;
@@ -67,21 +73,49 @@ private slots:
     void onRemoveSite();
     void onOpenConfigFile();
     void onSiteItemChanged(QTableWidgetItem *item);
+    void onLiveSourceItemChanged(QTableWidgetItem *item);
+    void onAddLiveSource();
+
+    // --- 直播页 ---
+    void onRefreshLives();
+    void onChannelsFetched(const QString &sourceKey, const QList<LiveChannel> &channels, const QString &error);
+    void onLiveFilterChanged();
+    void onPlayLiveClicked();
+    void onAddLiveClicked();
+    void onLiveChannelActivated();
 
 private:
+    /** 频道行：频道本体 + 它来自哪个直播源（播放时要用该源的 UA / Referer） */
+    struct ChannelRow
+    {
+        LiveChannel channel;
+        QString sourceKey;
+        QString sourceName;
+    };
+
     QWidget *createSearchTab();
     QWidget *createSourceTab();
+    QWidget *createLiveTab();
 
     void reloadSiteCombo();
     void reloadSiteTable();
+    void reloadLiveSourceTable();
+    void reloadLiveCombo();
     void updateSearchStatus();
     void clearDetailPane();
     void showDetail(const VodDetail &detail);
     void updateEpisodeList();
 
+    void rebuildLiveTable();
+    void applyLiveFilter();
+    void updateLiveStatus();
+
     /** 把当前线路的全部剧集转成播放列表条目（带上该源的 UA / Referer） */
     QList<PlaylistEntry> buildEntriesFromCurrentLine() const;
     void sendEntries(bool alsoPlay);
+
+    /** 直播条目：当前筛选结果整组进列表（PgUp/PgDn 换台） */
+    QList<PlaylistEntry> buildLiveEntries(int *startIndex) const;
 
     /** 首次打开时尽量贴到主窗口旁边，两个窗口并排互不遮挡 */
     void placeBesideParent();
@@ -90,7 +124,9 @@ private:
     void startImportRequest(const QUrl &url);
 
     CmsClient *m_client = nullptr;
+    LiveClient *m_liveClient = nullptr;
     QNetworkAccessManager *m_importNam = nullptr;
+    QTabWidget *m_tabs = nullptr;
 
     // --- 搜索页 ---
     QComboBox *m_siteCombo = nullptr;
@@ -121,7 +157,24 @@ private:
     /** 位置只自动摆一次，之后用户拖到哪就留在哪 */
     bool m_positioned = false;
 
+    // --- 直播页 ---
+    QComboBox *m_liveSourceCombo = nullptr;
+    QComboBox *m_liveGroupCombo = nullptr;
+    QLineEdit *m_liveFilterEdit = nullptr;
+    QTableWidget *m_channelTable = nullptr;
+    QLabel *m_liveStatusLabel = nullptr;
+    QPushButton *m_livePlayButton = nullptr;
+    QPushButton *m_liveAddButton = nullptr;
+
+    QList<ChannelRow> m_allChannels;      // 缓存里全部频道（按源顺序）
+    QList<ChannelRow> m_visibleChannels;  // 当前筛选结果，表格行号与它一一对应
+    QHash<QString, QList<LiveChannel>> m_channelCache;  // sourceKey → 频道
+    QSet<QString> m_pendingLiveKeys;
+    int m_liveFailedCount = 0;
+    int m_liveRequestedCount = 0;
+
     // --- 源配置页 ---
     QTableWidget *m_siteTable = nullptr;
+    QTableWidget *m_liveSourceTable = nullptr;
     bool m_reloadingTable = false;
 };

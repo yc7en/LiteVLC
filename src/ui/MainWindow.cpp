@@ -101,6 +101,8 @@ void MainWindow::setupMenuBar()
     QMenu *fileMenu = menuBar()->addMenu(QStringLiteral("媒体(&F)"));
     fileMenu->addAction(QStringLiteral("在线片源搜索(&S)..."), QKeySequence(QStringLiteral("Ctrl+F")),
                         this, &MainWindow::onOpenOnlineSearch);
+    fileMenu->addAction(QStringLiteral("直播频道(&L)..."), QKeySequence(QStringLiteral("Ctrl+Shift+L")),
+                        this, &MainWindow::onOpenLiveChannels);
     fileMenu->addSeparator();
     QAction *actOpen = fileMenu->addAction(QStringLiteral("打开视频文件(&O)..."), QKeySequence::Open, this, &MainWindow::onOpenFiles);
     Q_UNUSED(actOpen);
@@ -334,6 +336,12 @@ void MainWindow::onOpenOnlineSearch()
     m_sourceDialog->focusSearchInput();
 }
 
+void MainWindow::onOpenLiveChannels()
+{
+    onOpenOnlineSearch();          // 复用同一个窗口，避免两个片源窗口并存
+    m_sourceDialog->focusLiveTab();
+}
+
 void MainWindow::onCheckUpdate()
 {
     QMessageBox box(this);
@@ -370,7 +378,7 @@ void MainWindow::onAbout()
     box.setInformativeText(QStringLiteral(
         "轻量级本地 / 在线视频播放器\n\n"
         "· 基于 Qt 6.8 与 LibVLC 3.0\n"
-        "· 支持 TVBox 订阅格式的在线片源搜索与播放\n"
+        "· 支持 TVBox 配置的点播源搜索（sites）与直播频道（lives）\n"
         "· 纯本地运行，不上传任何播放数据"));
     box.setStandardButtons(QMessageBox::Ok);
     box.exec();
@@ -575,8 +583,11 @@ void MainWindow::onStreamResolved(const ResolvedStream &stream)
     m_playRetryCount = 0;
 
     auto &cfg = ConfigManager::instance();
-    // HLS 在线流走本地中继：清单文本过滤插播广告，分片仍由内核直连 CDN
-    const QString playUrl = hlsRelayUrl(stream.url, stream.userAgent, stream.referer);
+    // HLS 在线流走本地中继：清单文本过滤插播广告，分片仍由内核直连 CDN。
+    // 直播例外——中继会缓存清单，直播是滑动窗口，缓存后画面会停在旧片段上。
+    const QString playUrl = entry.live
+                                ? stream.url
+                                : hlsRelayUrl(stream.url, stream.userAgent, stream.referer);
     if (!m_player->openUrl(playUrl, stream.userAgent, stream.referer,
                            cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
         m_videoWidget->showOsdMessage(
@@ -618,7 +629,9 @@ void MainWindow::onStreamResolveFailed(const ResolveFailure &failure)
         || failure.kind == ResolveFailureKind::TlsFailed) {
         auto &cfgTls = ConfigManager::instance();
         m_lastStreamHasHeaders = false;
-        const QString playUrlTls = hlsRelayUrl(entry.location, entry.userAgent, entry.referer);
+        const QString playUrlTls = entry.live
+                                       ? entry.location
+                                       : hlsRelayUrl(entry.location, entry.userAgent, entry.referer);
         if (m_player->openUrl(playUrlTls, entry.userAgent, entry.referer,
                               cfgTls.hwAccelEnabled(), cfgTls.hwAccelBackend())) {
             setWindowTitle(QStringLiteral("%1 - LiteVLC Player").arg(entry.title));
@@ -718,8 +731,11 @@ void MainWindow::onPlayerError(const QString &message)
         }
 
         auto &cfg = ConfigManager::instance();
-        // 若失败原因是中继拉取失败（token 已标记 failed），这里会自动退回直连
-        const QString playUrlRetry = hlsRelayUrl(target, ua, referer);
+        // 若失败原因是中继拉取失败（token 已标记 failed），这里会自动退回直连；
+        // 直播条目本来就不走中继，这里保持一致
+        const QString playUrlRetry = entry.live
+                                         ? target
+                                         : hlsRelayUrl(target, ua, referer);
         if (m_player->openUrl(playUrlRetry, ua, referer, cfg.hwAccelEnabled(), cfg.hwAccelBackend())) {
             m_videoWidget->showOsdMessage(
                 QStringLiteral("换一组请求头重试（%1/2）…").arg(m_playRetryCount), 3000);

@@ -42,6 +42,8 @@ SOURCES += \
     src/core/AppPaths.cpp \
     src/core/ConfigManager.cpp \
     src/core/SourceManager.cpp \
+    src/core/LiveParser.cpp \
+    src/core/LiveClient.cpp \
     src/core/CmsClient.cpp \
     src/core/StreamProbe.cpp \
     src/core/PageSniffer.cpp \
@@ -64,6 +66,8 @@ HEADERS += \
     src/core/AppPaths.h \
     src/core/ConfigManager.h \
     src/core/SourceManager.h \
+    src/core/LiveParser.h \
+    src/core/LiveClient.h \
     src/core/CmsClient.h \
     src/core/StreamProbe.h \
     src/core/PageSniffer.h \
