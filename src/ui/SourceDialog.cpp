@@ -1034,7 +1034,6 @@ void SourceDialog::importPayload(const QByteArray &payload, const QString &origi
     if (result.livesImported > 0) {
         lines << QStringLiteral("· %1 个直播源").arg(result.livesImported);
     }
-
     // 混合配置：可用源已导入，同时告知跳过了哪些，免得用户疑惑「少了一半」
     QStringList skipped;
     if (result.siteStats.spiderSkipped > 0) {
@@ -1045,11 +1044,20 @@ void SourceDialog::importPayload(const QByteArray &payload, const QString &origi
         skipped << QStringLiteral("%1 个其他不支持的源").arg(result.siteStats.otherSkipped);
     }
     if (result.livesSkipped > 0) {
-        skipped << QStringLiteral("%1 个脚本型直播源（只有 api，没有清单地址）").arg(result.livesSkipped);
+        skipped << QStringLiteral("%1 个不可用直播源（只有脚本 api，或指向本机代理地址）")
+                       .arg(result.livesSkipped);
     }
     if (!skipped.isEmpty()) {
         lines << QString();
         lines << QStringLiteral("未导入：%1。").arg(skipped.join(QStringLiteral("，")));
+    }
+
+    // 有 sites 数组却一个都没能收：说清是配置本身的问题，不是导入出错
+    if (result.sitesImported == 0 && result.hasSites && result.siteStats.totalSites > 0) {
+        lines << QString();
+        lines << QStringLiteral("这份配置里有 %1 个点播站，但没有一个是 type=0/1 的苹果 CMS 接口，"
+                                "所以「在线搜索」页暂时搜不到片；直播源不受影响。")
+                     .arg(result.siteStats.totalSites);
     }
 
     lines << QString();

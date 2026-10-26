@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -63,32 +64,203 @@ QString normalizeKey(const QString &raw, int index, const QString &prefix = QStr
     return key;
 }
 
-/** 解析配置 JSON：直连失败时再试一次 base64（TVBox 订阅常把整份配置 base64 过） */
-QJsonDocument parseConfigJson(const QByteArray &payload, QJsonParseError *outError)
+/**
+ * 剥掉 JSON 里的注释。
+ *
+ * TVBox 配置常带 `//` 行注释（整条源被注释掉表示停用），标准 JSON 不允许，
+ * QJsonDocument 会直接报错。字符串内部的 `//`（就是 URL 里的 `https://`）
+ * 必须原样保留，所以逐字节扫描并跟踪引号状态。
+ */
+QByteArray stripJsonComments(const QByteArray &in)
 {
-    const QByteArray body = payload.trimmed();
+    QByteArray out;
+    out.reserve(in.size());
+    bool inString = false;
+    bool escaped = false;
+
+    for (int i = 0; i < in.size(); ++i) {
+        const char c = in.at(i);
+
+        if (inString) {
+            out.append(c);
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (c == '"') {
+            inString = true;
+            out.append(c);
+            continue;
+        }
+
+        if (c == '/' && i + 1 < in.size()) {
+            const char next = in.at(i + 1);
+            if (next == '/') {
+                while (i < in.size() && in.at(i) != '\n') {
+                    ++i;
+                }
+                if (i < in.size()) {
+                    out.append('\n');
+                }
+                continue;
+            }
+            if (next == '*') {
+                i += 2;
+                while (i + 1 < in.size() && !(in.at(i) == '*' && in.at(i + 1) == '/')) {
+                    ++i;
+                }
+                i += 1; // 跳过配对的 '/'
+                continue;
+            }
+        }
+
+        out.append(c);
+    }
+    return out;
+}
+
+bool isBase64Char(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+           || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=';
+}
+
+/** 从任意二进制里切出连续 base64 段（图片夹带配置时，前面是图像数据，后面是 base64） */
+QList<QByteArray> extractBase64Runs(const QByteArray &payload, int minLength)
+{
+    QList<QByteArray> runs;
+    int start = -1;
+    for (int i = 0; i <= payload.size(); ++i) {
+        const bool ok = i < payload.size() && isBase64Char(payload.at(i));
+        if (ok) {
+            if (start < 0) {
+                start = i;
+            }
+        } else if (start >= 0) {
+            if (i - start >= minLength) {
+                runs.append(payload.mid(start, i - start));
+            }
+            start = -1;
+        }
+    }
+    return runs;
+}
+
+/** 判断解析结果是不是一份片源配置，避免把二进制里偶然解出的 JSON 当成配置 */
+bool looksLikeConfig(const QJsonDocument &doc)
+{
+    if (doc.isArray()) {
+        return !doc.array().isEmpty();
+    }
+    if (!doc.isObject()) {
+        return false;
+    }
+    const QJsonObject root = doc.object();
+    if (root.value(QStringLiteral("sites")).isArray()
+        || root.value(QStringLiteral("lives")).isArray()) {
+        return true;
+    }
+    const QJsonObject data = root.value(QStringLiteral("data")).toObject();
+    return data.value(QStringLiteral("sites")).isArray()
+           || data.value(QStringLiteral("lives")).isArray();
+}
+
+/** 对一段候选文本做「原样 → 剥注释」两级尝试 */
+QJsonDocument tryParseBody(const QByteArray &body, QJsonParseError *outError)
+{
+    QByteArray text = body;
+    // 去掉 UTF-8 BOM，否则 QJsonDocument 在第一个字节就报 illegal value
+    if (text.startsWith("\xEF\xBB\xBF")) {
+        text.remove(0, 3);
+    }
+    text = text.trimmed();
 
     QJsonParseError error{};
-    QJsonDocument doc = QJsonDocument::fromJson(body, &error);
+    QJsonDocument doc = QJsonDocument::fromJson(text, &error);
+    if (!doc.isNull()) {
+        if (outError) {
+            *outError = error;
+        }
+        return doc;
+    }
 
-    if (doc.isNull()) {
-        QByteArray compact = body;
-        compact.replace("\r", "").replace("\n", "").replace(" ", "");
-        const QByteArray decoded = QByteArray::fromBase64(compact);
-        if (!decoded.isEmpty()) {
-            QJsonParseError innerError{};
-            const QJsonDocument innerDoc = QJsonDocument::fromJson(decoded, &innerError);
-            if (!innerDoc.isNull()) {
-                doc = innerDoc;
-                error = innerError;
+    const QByteArray stripped = stripJsonComments(text);
+    if (stripped != text) {
+        QJsonParseError strippedError{};
+        const QJsonDocument strippedDoc = QJsonDocument::fromJson(stripped, &strippedError);
+        if (!strippedDoc.isNull()) {
+            if (outError) {
+                *outError = strippedError;
             }
+            return strippedDoc;
+        }
+        error = strippedError;
+    }
+
+    if (outError) {
+        *outError = error;
+    }
+    return QJsonDocument();
+}
+
+/**
+ * 解析配置 JSON。真实分发站的花样比想象中的多，按代价从低到高逐级尝试：
+ *  1. 响应体本身是 JSON（可能带 // 注释）
+ *  2. 整份响应体是 base64
+ *  3. 响应体里夹着一段 base64（典型：图片尾部拼接配置，Content-Type 还是 image/*）
+ * 每级都要求解析结果「看起来像配置」，命中即返回。
+ */
+QJsonDocument parseConfigJson(const QByteArray &payload, QJsonParseError *outError)
+{
+    QJsonParseError error{};
+    QJsonDocument doc = tryParseBody(payload, &error);
+    if (looksLikeConfig(doc)) {
+        if (outError) {
+            *outError = error;
+        }
+        return doc;
+    }
+
+    // 整份 base64：先按原样试，失败再剔除空白（base64 常按行折行）
+    QByteArray compact = payload;
+    compact.replace("\r", "").replace("\n", "").replace(" ", "").replace("\t", "");
+    const QByteArray whole = QByteArray::fromBase64(compact);
+    if (!whole.isEmpty()) {
+        doc = tryParseBody(whole, &error);
+        if (looksLikeConfig(doc)) {
+            if (outError) {
+                *outError = error;
+            }
+            return doc;
+        }
+    }
+
+    // 夹带的 base64：图片在前、配置在后，256 字节起才认为是有效载荷
+    const QList<QByteArray> runs = extractBase64Runs(payload, 256);
+    for (const QByteArray &run : runs) {
+        const QByteArray decoded = QByteArray::fromBase64(run);
+        if (decoded.size() < 32) {
+            continue;
+        }
+        doc = tryParseBody(decoded, &error);
+        if (looksLikeConfig(doc)) {
+            if (outError) {
+                *outError = error;
+            }
+            return doc;
         }
     }
 
     if (outError) {
         *outError = error;
     }
-    return doc;
+    return QJsonDocument();
 }
 
 /** 从配置里取数组：支持 root[key] 与 root.data[key] 两种包法 */
@@ -102,6 +274,33 @@ QJsonArray extractArray(const QJsonObject &root, const QString &key)
         return data.value(key).toArray();
     }
     return QJsonArray();
+}
+
+/**
+ * TVBox 内置代理判定。
+ *
+ * 配置里常见的 `http://127.0.0.1:9978/proxy?do=xxx` 是 TVBox 客户端自己起的本地代理，
+ * 桌面端没有这个服务。收进来只会让用户看到一堆「连接被拒绝」，所以在导入阶段就跳过。
+ *
+ * 判据限定为「本机地址 + 路径含 proxy」，避免把用户自建在本机的清单服务也误伤。
+ */
+bool isLocalProxyUrl(const QString &url)
+{
+    const QUrl u(url);
+    const QString scheme = u.scheme().toLower();
+    if (scheme != QStringLiteral("http") && scheme != QStringLiteral("https")) {
+        return false;
+    }
+    const QString host = u.host();
+    if (host.isEmpty()) {
+        return false;
+    }
+    bool loopback = host.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) == 0;
+    if (!loopback) {
+        QHostAddress addr;
+        loopback = addr.setAddress(host) && addr.isLoopback();
+    }
+    return loopback && u.path().contains(QStringLiteral("proxy"), Qt::CaseInsensitive);
 }
 
 } // namespace
@@ -628,6 +827,14 @@ QList<LiveSource> SourceManager::parseLives(const QByteArray &json, int *skipped
             live.url = obj.value(QStringLiteral("api")).toString().trimmed();
         }
         if (live.name.isEmpty() && live.url.isEmpty()) {
+            continue;
+        }
+
+        // TVBox 内置本地代理（127.0.0.1:9978/proxy?do=xxx）桌面端连不上
+        if (isLocalProxyUrl(live.url)) {
+            if (skipped) {
+                ++*skipped;
+            }
             continue;
         }
 

@@ -84,7 +84,7 @@ struct ConfigImportResult
 {
     int sitesImported = 0;
     int livesImported = 0;
-    int livesSkipped = 0;    // 只给 api（脚本）没有清单地址的直播源
+    int livesSkipped = 0;    // 没有可用清单地址的直播源（脚本 api / 本机回环地址）
     bool hasSites = false;   // 配置里是否出现过 sites 数组
     bool hasLives = false;   // 配置里是否出现过 lives 数组
     ParseStats siteStats;
@@ -139,7 +139,7 @@ public:
     static QList<SourceSite> parseSubscription(const QByteArray &json, QString *error,
                                                ParseStats *stats = nullptr);
 
-    /** 从同一份配置里解析直播源；skipped 回填「只有脚本 api、没有清单地址」的条数 */
+    /** 从同一份配置里解析直播源；skipped 回填「没有可用清单地址」的条数 */
     static QList<LiveSource> parseLives(const QByteArray &json, int *skipped = nullptr);
 
     /** 导入订阅；replaceExisting=true 表示全量替换。返回导入条数 */
