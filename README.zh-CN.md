@@ -202,3 +202,4 @@ git push origin v1.1.5
 | `R-261022-0009` | 新功能 | 支持 Intel Mac：macOS CI 矩阵化，`macos-15-intel` 与 arm64 并列出 x86_64 包；dmg 名带完整平台标签（macos-arm64 / macos-x64），更新可按架构匹配资产 |
 | `R-261022-0010` | 缺陷修复 | v1.1.4 的 macOS 打包挂在架构自检（bash 3.2 runner 上 `EXPECT_ARCH` 被当作未定义，且报错尾巴被截断）：期望架构改为在使用点就地推导，新增 `ERR` trap 打印行号与命令，CI 改为外递真实错误行而非日志尾巴 |
 | `R-261026-0001` | 新功能 | 桌面端接入 TVBox 直播源（lives）：一份配置同时导入 sites + lives，新增「直播」页（分组 / 频道筛选 / 整组进列表换台），直播条目绕开 HLS 中继（中继缓存清单会让滑动窗口卡死）；`effectiveReferer` 改用 `authority()` 保住自定义端口 |
+| `BugFix-261026-0001` | 缺陷修复 | `v1.1.5` 的 Release 缺 `macos-arm64.dmg`：arm64 runner 上 `hdiutil create` 偶发失败（同一 commit 几分钟前在 main 上全绿）。dmg 生成改为重试 3 次、每次失败打 stderr、全败时输出 `df -h` |

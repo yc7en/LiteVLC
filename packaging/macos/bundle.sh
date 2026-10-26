@@ -132,8 +132,27 @@ if [ "${MAKE_DMG:-1}" = "1" ]; then
 
 本版本为 ad-hoc 签名（没有 Apple 开发者证书），不影响功能。
 TXT
-    hdiutil create -volname "LiteVlcPlayer ${VERSION}" -srcfolder "$OUT_DIR/dmg-stage" \
-        -ov -format UDZO "$DMG" >/dev/null
+    # hdiutil 在 CI 上偶发失败（Resource busy / 临时挂载点忙 / 磁盘暂存不足），
+    # 单次失败就直接挂掉整条流水线代价太大，这里重试 3 次并把真实报错留在日志里。
+    DMG_OK=0
+    for attempt in 1 2 3; do
+        rm -f "$DMG"
+        if hdiutil create -volname "LiteVlcPlayer ${VERSION}" -srcfolder "$OUT_DIR/dmg-stage" \
+            -ov -format UDZO "$DMG" >/dev/null; then
+            DMG_OK=1
+            break
+        fi
+        echo "!! hdiutil 第 ${attempt} 次失败（5 秒后重试）" >&2
+        sleep 5
+    done
+
+    if [ "$DMG_OK" -ne 1 ]; then
+        echo "!! hdiutil 连续 3 次失败，dmg 未生成" >&2
+        echo "!! 临时目录磁盘占用：" >&2
+        df -h "$OUT_DIR" >&2 || true
+        exit 1
+    fi
+
     rm -rf "$OUT_DIR/dmg-stage"
     echo "==> 完成: $DMG"
 fi
