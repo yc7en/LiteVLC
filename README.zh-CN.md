@@ -152,11 +152,11 @@
 先把重复的版本号统一（`CMakeLists.txt` 的 `project(... VERSION)`、`resources/app.rc` 的 `FILEVERSION`、`installer.iss` 的 `MyAppVersion`、`package.bat` 的 `APPVER`），然后打 tag 推送：
 
 ```bash
-git tag v1.1.4
-git push origin v1.1.4
+git tag v1.1.5
+git push origin v1.1.5
 ```
 
-两个工作流在 tag 上各跑一遍，把各自的产物挂到**同一个 Release**：Windows 出 `LiteVlcPlayer-1.1.4-Setup.exe`（外加便携 zip），macOS 出 `LiteVlcPlayer-1.1.4-macos-arm64.dmg` 与 `LiteVlcPlayer-1.1.4-macos-x64.dmg`，不需要手动下载再上传。tag push 不受 `paths` 过滤影响，所以发版一定编得出来。只想验证编译、不发版时，推普通提交或用 `workflow_dispatch`，产物留在 Actions 的 Artifacts 里（保留 14 天）。
+两个工作流在 tag 上各跑一遍，把各自的产物挂到**同一个 Release**：Windows 出 `LiteVlcPlayer-1.1.5-Setup.exe`（外加便携 zip），macOS 出 `LiteVlcPlayer-1.1.5-macos-arm64.dmg` 与 `LiteVlcPlayer-1.1.5-macos-x64.dmg`，不需要手动下载再上传。tag push 不受 `paths` 过滤影响，所以发版一定编得出来。只想验证编译、不发版时，推普通提交或用 `workflow_dispatch`，产物留在 Actions 的 Artifacts 里（保留 14 天）。
 
 ### macOS（Apple Silicon）构建
 
@@ -169,7 +169,7 @@ git push origin v1.1.4
    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
    cmake --build build
    "$(brew --prefix qt)/bin/macdeployqt" build/LiteVlcPlayer.app -always-overwrite
-   packaging/macos/bundle.sh build/LiteVlcPlayer.app vlc/VLC.app/Contents/MacOS 1.1.4
+   packaging/macos/bundle.sh build/LiteVlcPlayer.app vlc/VLC.app/Contents/MacOS 1.1.5
    ```
 4. 产物是 ad-hoc 签名（无 Apple 开发者证书），用户首次打开需**右键 → 打开**，或 `xattr -dr com.apple.quarantine /Applications/LiteVlcPlayer.app`；dmg 内已附说明。
 5. macOS 上配置存于 `~/Library/Application Support/LiteVlcPlayer/`（不会写进 .app 包，否则破坏签名封印）。
