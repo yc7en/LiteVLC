@@ -203,3 +203,4 @@ git push origin v1.1.5
 | `R-261022-0010` | 缺陷修复 | v1.1.4 的 macOS 打包挂在架构自检（bash 3.2 runner 上 `EXPECT_ARCH` 被当作未定义，且报错尾巴被截断）：期望架构改为在使用点就地推导，新增 `ERR` trap 打印行号与命令，CI 改为外递真实错误行而非日志尾巴 |
 | `R-261026-0001` | 新功能 | 桌面端接入 TVBox 直播源（lives）：一份配置同时导入 sites + lives，新增「直播」页（分组 / 频道筛选 / 整组进列表换台），直播条目绕开 HLS 中继（中继缓存清单会让滑动窗口卡死）；`effectiveReferer` 改用 `authority()` 保住自定义端口 |
 | `BugFix-261026-0001` | 缺陷修复 | `v1.1.5` 的 Release 缺 `macos-arm64.dmg`：arm64 runner 上 `hdiutil create` 偶发失败（同一 commit 几分钟前在 main 上全绿）。dmg 生成改为重试 3 次、每次失败打 stderr、全败时输出 `df -h` |
+| `BugFix-261026-0002` | 缺陷修复 | 配置分发站的地址导入失败只报一句 JSON 解析错误。这类站点按 `User-Agent` 分流：桌面 Chrome UA 被 302 回首页（返回 HTML），只有 `okhttp`/`TVBox`/Android 客户端 UA 才拿到 JSON 配置。导入改为发客户端 UA，响应是网页时自动换浏览器 UA 重试一次，两次都不行则提示最终地址与可能原因 |

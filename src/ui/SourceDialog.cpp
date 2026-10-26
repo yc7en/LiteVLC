@@ -918,31 +918,63 @@ void SourceDialog::onImportFromUrl()
     startImportRequest(QUrl(url.trimmed()));
 }
 
-void SourceDialog::startImportRequest(const QUrl &url)
+void SourceDialog::startImportRequest(const QUrl &url, int attempt)
 {
     if (!url.isValid()) {
         QMessageBox::warning(this, QStringLiteral("导入失败"), QStringLiteral("订阅地址无效"));
         return;
     }
 
+    // 配置分发站普遍按 UA 分流：桌面浏览器 UA 会被 302 回站点首页（返回 HTML），
+    // 只有客户端 UA 才拿得到真正的 JSON 配置。所以默认装成客户端，
+    // 万一某个站只认浏览器，第 1 次重试再换回浏览器 UA。
+    const bool asClient = (attempt == 0);
+    const QString userAgent =
+        asClient ? QStringLiteral("okhttp/3.12.1")
+                 : QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/124.0.0.0 Safari/537.36");
+
     QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-                      QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                     "Chrome/124.0.0.0 Safari/537.36"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, userAgent);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(20000);
 
     QNetworkReply *reply = m_importNam->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, url]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, url, attempt]() {
         reply->deleteLater();
+        if (m_ignoreResults) {
+            return;
+        }
         if (reply->error() != QNetworkReply::NoError) {
             QMessageBox::warning(this, QStringLiteral("导入失败"),
                                  QStringLiteral("拉取订阅失败：%1").arg(reply->errorString()));
             return;
         }
-        importPayload(reply->readAll(), QStringLiteral("订阅链接 %1").arg(url.toString()));
+
+        const QByteArray payload = reply->readAll();
+
+        // 拿到网页说明地址不对（多半是被重定向回首页了），换另一套 UA 再试一次，
+        // 两次都只给网页才报错 —— 直接把「这是网页不是配置」讲清楚。
+        if (payload.trimmed().startsWith('<')) {
+            if (attempt == 0) {
+                startImportRequest(url, 1);
+                return;
+            }
+            QMessageBox::warning(
+                this, QStringLiteral("导入失败"),
+                QStringLiteral("这个地址返回的是网页，不是配置内容。\n\n"
+                               "最终地址：%1\n\n"
+                               "常见原因：\n"
+                               "· 复制的是站点首页或分享页，不是「配置地址」；\n"
+                               "· 配置地址已失效，或需要登录后才能访问；\n"
+                               "· 站点只对特定客户端下发配置。")
+                    .arg(reply->url().toString()));
+            return;
+        }
+
+        importPayload(payload, QStringLiteral("订阅链接 %1").arg(url.toString()));
     });
 }
 

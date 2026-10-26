@@ -121,7 +121,7 @@ private:
     void placeBesideParent();
 
     void importPayload(const QByteArray &payload, const QString &origin);
-    void startImportRequest(const QUrl &url);
+    void startImportRequest(const QUrl &url, int attempt = 0);
 
     CmsClient *m_client = nullptr;
     LiveClient *m_liveClient = nullptr;
