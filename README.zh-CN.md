@@ -1,207 +1,168 @@
 [Eng](README.md) | **中文**
 
-# LiteVLC Player (Qt 6 QWidget + LibVLC 极简播放器)
+# LiteVLC Player
 
-基于 **Qt 6 (C++ / QWidget)** 与 **LibVLC 3.0.21** 打造的极简、高性能本地视频播放器，剥离了原版 VLC 臃肿的流媒体与媒体库界面，只保留核心高频看片功能；并支持导入 **TVBox 兼容的在线片源**做搜索与追剧。
+![Version](https://img.shields.io/badge/version-1.1.6-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%2F%20macOS-6a0dad)
+![Stars](https://img.shields.io/github/stars/yc7en/LiteVLC)
+![Forks](https://img.shields.io/github/forks/yc7en/LiteVLC)
+
+> 基于 **Qt 6 (C++ / QWidget)** 与 **LibVLC** 打造的极简、高性能本地视频播放器，并支持导入 **TVBox 兼容的在线片源**做搜索与追剧。
 
 <p align="center">
   <img src="docs/images/screenshot-main.png" width="640" alt="LiteVLC Player 主界面" /><br/>
   <img src="docs/images/screenshot-online-search.png" width="640" alt="在线片源搜索" />
 </p>
 
----
+## 概述
 
-## 一、 已实现功能清单
+LiteVLC Player 剥离了原版 VLC 臃肿的流媒体、媒体库与皮肤界面，只保留核心高频看片功能。它支持本地视频硬件加速播放、播放进度记忆，并可导入标准 TVBox / CatVod 订阅，搜索与观看在线剧集与直播频道。支持 **Windows** 与 **macOS**（Apple Silicon + Intel）。
 
-### 1. 核心基础功能
-- **播放控制**：播放 / 暂停 / 停止、自定义指哪跳哪进度条 (`ClickableSlider`)、拖拽防抖跳转、左/右方向键快退/快进 5 秒。
-- **音量与声轨**：鼠标滚轮或上下方向键调节音量、一键静音 (`M`)、多语言声轨自动识别与实时切换。
-- **画面与显示**：双击画面或按 `Enter` / `F` 切换全屏（全屏下鼠标移至底部边缘自动呼出控制栏）、保持原视频宽高比（支持 `默认原比例` / `16:9` / `4:3` / `21:9` / `1:1` 切换）、基于 Win32 `SetWindowPos` 的零闪烁窗口始终置顶 (`T`)。
-- **媒体加载与记忆续播**：支持将视频或字幕直接拖拽进窗口播放；自动记录每个视频的播放进度 (`player_config.json`)，下次打开同一视频自动跳转到上次观看位置并显示左上角 OSD 提示。
+## 功能特性
 
-### 2. 高级功能
-- **外挂字幕与时间轴微调**：打开视频时自动扫描并挂载同目录下同名（或带语言后缀如 `.zh.srt`）的 `.srt` / `.ass` / `.ssa` 字幕；支持快捷键 `[` / `]` 以 $\pm 0.5\text{s}$ 步进微调字幕时间轴。
-- **倍速播放 (0.5x ~ 3.0x)**：支持控制栏下拉框或快捷键 `C` / `V` 调节倍速，声音保持原调不变。
-- **轻量级播放列表**：右侧可折叠 `QListWidget` 抽屉，支持顺序播放、列表循环、单曲循环；本地文件与在线剧集混排在同一张队列里。
-- **GPU 硬件加速开关**：支持在设置窗口开启/关闭 GPU 硬解（`Auto` / `D3D11VA` / `DXVA2` / `软解`），播放 4K 视频极低 CPU 占用。
-- **自动跳过片头片尾**：支持设定片头秒数与片尾秒数，追剧连播时自动跳过片头并在片尾自动切换下一集。
+### 核心播放
 
-### 3. 在线片源（兼容 TVBox 订阅）
-- **自定义源**：导入 TVBox / CatVod 标准订阅 JSON（支持订阅链接、本地文件、剪贴板三种方式）。分发形态按内容识别而非按声明类型：原样 JSON、带 `//` 注释的 JSON、整份 base64、乃至藏在 JPEG 里的配置（图片字节后跟 base64 尾巴）都能导入。也可以直接手改程序目录下的 `sources.json`。
-- **只对接苹果 CMS 接口**：`type=0`（XML）与 `type=1`（JSON）两种接口，字段与 TVBox 逐字段对齐；`jar` / `js` / `py` 脚本 Spider 源需要额外运行时，导入时自动跳过并在界面说明。
-- **多源并发搜索**：可指定单个源，也可「全部源」并发搜索，结果边搜边出，按来源分组展示片名 / 备注 / 来源。
-- **选集与多线路**：自动解析 `vod_play_from` / `vod_play_url`，拆成多条线路 + 剧集列表，双击剧集即可播放。
-- **加入播放列表**：选中剧集后点「▶ 播放选中剧集」会把整条线路加进右侧播放列表并起播；点「＋ 加入播放列表」只入列不打断当前播放。之后的上一集/下一集、播完续播、三种播放模式都作用在这张统一队列上。
-- **搜索窗不锁主窗口**：搜索窗是普通窗口（非模态），开着它照样能暂停、拖进度、切集；点播放不会关闭搜索窗，可以连着挑好几部。
-- **自动连播**：按播放列表顺序播完一集自动续下一集，`PgUp` / `PgDn` 切换上/下一集；某一集只拿到空流、或短时间内连续多集都播不起来时会自动停下来提示，不会把整季瞬间跳完。
-- **防盗链支持**：播放时按源配置自动注入 `User-Agent` / `Referer`（Referer 缺省取接口 origin），兼容大部分 403 防盗链站点。
-- **HLS 插播广告过滤**：播放在线 m3u8 时自动走本地中继，按 `#EXT-X-DISCONTINUITY` 分块剔除混在正片中间的短广告块（片源站把广告切片混进清单的手法），过滤时 OSD 提示「已跳过 N 处插播广告」；分片仍由播放内核直连 CDN 不占带宽，可在设置里关闭；只对点播清单生效，直播流与无广告特征的原样透传。
-- **细节处理**：GBK 编码接口自动回退解码、HTML 简介清洗、`ac=videolist` 无结果时自动改用 `ac=detail` 重试、网络流不写入本地进度记忆。
-- **直播频道（TVBox `lives`）**：同一份配置导入时会一并收下直播源（`m3u` / `txt`），一个 TVBox 地址既能搜点播也能看直播。「直播」页拉取频道清单（按分组、可按频道名筛选），播某个频道时整组进播放列表，`PgUp` / `PgDn` 就是换台。直播条目刻意绕开 HLS 中继：中继会缓存清单，而直播是滑动窗口，缓存后画面会卡住。
+- **播放控制**：播放 / 暂停 / 停止、自定义"指哪跳哪"进度条（`ClickableSlider`）、拖拽防抖跳转、`Left` / `Right` 快退/快进 5 秒。
+- **音量与声轨**：鼠标滚轮或 `Up` / `Down` 调节音量、`M` 一键静音、多语言声轨自动识别与实时切换。
+- **画面与显示**：双击或 `Enter` / `F` 全屏、宽高比预设（`原比例` / `16:9` / `4:3` / `21:9` / `1:1`）、基于 Win32 `SetWindowPos` 的零闪烁窗口置顶（`T`）。
+- **加载与续播**：将视频或字幕拖进窗口即可播放；自动记录每个视频的播放进度，下次打开跳回原位置并显示 OSD 提示。
 
-### 4. 桌面集成与分发
-- **应用图标**：程序 / 快捷方式 / 任务栏统一使用内置图标（`resources/app.ico` + 多尺寸 PNG，exe 内嵌版本信息 1.1.0）。
-- **手动检查更新（预留）**：菜单「帮助 → 检查更新」只回显当前版本，程序不会后台自动检查、不会自动下载；更新源为 GitHub Releases（仓库 `yc7en/LiteVLC`，由 `-DAPP_UPDATE_REPO=owner/repo` 注入），不内置任何自建服务器地址。
-- **Windows 11 安装包**：`package.bat` 一键完成 编译 → windeployqt 部署 → 复制 LibVLC → Inno Setup 打包，产物在 `dist\installer\LiteVlcPlayer-<版本>-Setup.exe`（桌面快捷方式 / 开始菜单 / 卸载 / 清理用户数据一应俱全）。
-- **配置目录自适应**：绿色版（程序目录可写）配置就地存放；安装到 `Program Files` 后自动回退到 `%APPDATA%\LiteVlcPlayer`，安装版也能正常保存设置与进度。
+### 高级功能
 
----
+- **外挂字幕与时间轴微调**：自动挂载同名（或带语言后缀如 `.zh.srt`）的 `.srt` / `.ass` / `.ssa` 字幕；`[` / `]` 以 ±0.5 秒步进微调。
+- **倍速播放（0.5× – 3.0×）**：下拉框或 `C` / `V` 调节，声音保持原调。
+- **轻量播放列表**：右侧可折叠 `QListWidget` 抽屉，顺序 / 列表循环 / 单曲循环；本地文件与在线剧集共用一张队列。
+- **GPU 硬解**：设置中可切换（`Auto` / `D3D11VA` / `DXVA2` / `软解`），4K 播放极低 CPU 占用。
+- **自动跳过片头片尾**：设定秒数后，连播自动跳片头并在片尾切下一集。
 
-## 二、 快捷键一览
+### 在线片源（兼容 TVBox 订阅）
+
+- **自定义源**：导入 TVBox / CatVod 标准订阅 JSON（订阅链接 / 本地文件 / 剪贴板）；按内容形态而非声明类型识别（原样 JSON、带注释 JSON、整份 base64、藏在 JPEG 里的配置）。
+- **只对接苹果 CMS 接口**：`type=0`（XML）与 `type=1`（JSON），与 TVBox 逐字段对齐；`jar` / `js` / `py` 脚本 Spider 需要额外运行时，导入时自动跳过。
+- **多源并发搜索**：指定单源或全部源并发搜索，结果按来源分组实时返回。
+- **选集与多线路**：自动解析 `vod_play_from` / `vod_play_url`，拆成多条线路与剧集列表。
+- **统一播放列表**："▶ 播放选中剧集"整条入列并起播；搜索窗为非模态；连播带保护（连续失败自动停，不会跳完整季）。
+- **防盗链**：按源配置注入 `User-Agent` / `Referer`（Referer 缺省取接口 origin）。
+- **HLS 插播广告过滤**：在线 m3u8 走本地中继，按 `#EXT-X-DISCONTINUITY` 剔除广告短块；分片仍直连 CDN。
+- **直播频道（TVBox `lives`）**：同一份配置一并导入直播源（`m3u` / `txt`），「直播」页支持分组与筛选，整组进列表、`PgUp` / `PgDn` 换台；直播条目刻意绕开 HLS 中继。
+
+### 离线缓存（整片下载）
+
+- 播放列表右键 →「缓存本集到本地」；只做单集，不支持直播。
+- **地址过期也能接着下**：缓存身份是「站点 + 影片 id + 线路 + 集数」，分片按累计播放时间轴建索引；遇 403/404/410 自动回源重新取地址，重新对齐后**只补缺口**。
+- **缓存列表**（`Ctrl+Shift+D`）：进度 / 大小 / 速度 / 真实失败原因；可暂停、重试、删除（可选连文件）、打开目录。
+- **命中本地就播**：完整缓存的条目直接走本地，不走网络、不经中继。
+- **导出单文件**：合并为 `.ts` / `.mp4`（纯字节拼接，不转码）；`ffmpeg` 在 PATH 时才额外提供无损封装为标准 MP4 的选项。
+- **限流**：任务数与分片连接数可调，支持全局 KB/s 限速；**有视频在播时自动让路**。
+- **不支持**：加密源（`#EXT-X-KEY` / AES-128）明确拒绝。
+
+### 桌面集成与分发
+
+- **应用图标**：程序 / 快捷方式 / 任务栏统一使用内置图标，exe 内嵌版本信息。
+- **手动检查更新（预留）**：「帮助 → 检查更新」只回显当前版本，不后台自动检查/下载；更新源为 GitHub Releases（`yc7en/LiteVLC`，由 `-DAPP_UPDATE_REPO` 注入）。
+- **Windows 安装包**：`package.bat` 一键完成 编译 → `windeployqt` → 复制 LibVLC → Inno Setup，产出 `LiteVlcPlayer-<版本>-Setup.exe`。
+- **配置目录自适应**：绿色版配置就地存放；安装到 `Program Files` 后自动回退到 `%APPDATA%\LiteVlcPlayer`。
+
+## 快捷键一览
 
 | 快捷键 | 功能说明 |
 | :--- | :--- |
 | `Space` | 播放 / 暂停 |
-| `Enter` / `F` / `双击画面` | 全屏 / 退出全屏 (`Esc` 退出全屏) |
+| `Enter` / `F` / 双击画面 | 进入 / 退出全屏（`Esc` 退出） |
 | `Left` / `Right` | 快退 5 秒 / 快进 5 秒 |
-| `Up` / `Down` / `鼠标滚轮` | 音量 +5% / -5% |
-| `M` | 一键静音 / 取消静音 |
+| `Up` / `Down` / 鼠标滚轮 | 音量 +5% / −5% |
+| `M` | 静音 / 取消静音 |
 | `[` / `]` | 字幕时间轴提前 0.5 秒 / 延后 0.5 秒 |
-| `C` / `V` | 播放倍速 -0.25x / +0.25x (`0.5x ~ 3.0x`) |
-| `T` | 窗口始终置顶开关 |
+| `C` / `V` | 播放倍速 −0.25× / +0.25×（`0.5×` – `3.0×`） |
+| `T` | 窗口置顶开关 |
 | `L` | 显示 / 隐藏右侧播放列表 |
 | `Ctrl+F` | 打开在线片源搜索 |
-| `PgUp` / `PgDn` | 上一集 / 下一集（在线模式下切换剧集） |
+| `Ctrl+Shift+D` | 打开缓存下载列表 |
+| `PgUp` / `PgDn` | 上一集 / 下一集（在线模式） |
 
----
+## 编译与运行
 
-## 三、 在线片源配置
+环境要求：
 
-在线源与播放器是解耦的：播放器只负责「拿到一个 http(s) 直链 + UA/Referer 就播」，源的可信度、可用性由你自己导入的订阅决定。
+- **Qt 6**（64 位，MSVC 或 MinGW）
+- **CMake**（或 Qt Creator）
+- **Inno Setup 6** —— 仅用于 Windows 安装包（`package.bat` 依次找 `E:\tools\innosetup\ISCC.exe`、标准安装路径，或环境变量 `INNO_SETUP`）
 
-**导入方式**（点底部控制栏「在线」按钮或 `Ctrl+F` → 「源配置」页）：
+仓库已内置裁剪精简后的 **LibVLC 3.0.21 (win64) SDK 与运行库**（`vlc/` 目录），无需配置环境变量。
+
+```bash
+# 配置 + 编译（任意平台）
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+
+# 一键打包 Windows 11 安装包（需 Inno Setup 6）
+package.bat
+```
+
+- CMake 会在编译后自动把 `libvlc.dll` / `libvlccore.dll` 拷贝到可执行文件旁，并定位 `vlc/plugins`。
+- macOS 通过 `macdeployqt` + `packaging/macos/bundle.sh` 产出 arm64（及 x64）`.app` / `.dmg`。
+- CI（`windows.yml` / `macos.yml`）在推 `main` 或 `workflow_dispatch` 时构建；推 `v*` tag 会把 Setup.exe 与 dmg 挂到同一个 Release。版本号统一从 `CMakeLists.txt` 读取。
+- 发布：在 `CMakeLists.txt`、`resources/app.rc`、`installer.iss`、`package.bat` 中统一提升版本号，然后 `git tag v<版本> && git push origin v<版本>`。
+
+## 配置
+
+在线源与播放器解耦：播放器只负责「拿到一个 http(s) 直链 + UA/Referer 就播」，源的可信度与可用性由你导入的订阅决定。
+
+**导入方式**（底部控制栏「在线」按钮或 `Ctrl+F` →「源配置」）：
 
 1. **从订阅链接导入** —— 填 TVBox 配置地址，直接拉取；
 2. **导入本地 JSON** —— 选一个 TVBox 配置 / `sources.json`；
 3. **从剪贴板粘贴** —— 复制一段订阅 JSON 后点一下。
 
-**配置文件**：程序目录下的 `sources.json`，首次运行会自动生成模板：
+**配置文件**：程序目录下的 `sources.json`（首次运行自动生成模板）。关键字段：`type`（`0` = 苹果 CMS XML，`1` = JSON）、`api`、`searchable`、`enabled`、`userAgent` / `referer`、`timeout`。
 
-```json
-{
-    "sites": [
-        {
-            "key": "demo",
-            "name": "示例源",
-            "type": 1,
-            "api": "https://example.com/api.php/provide/vod",
-            "searchable": 1,
-            "timeout": 15,
-            "userAgent": "",
-            "referer": ""
-        }
-    ]
-}
+> 只支持可直接请求的苹果 CMS 接口。`jar` / `js` / `py` 脚本 Spider 需要 JVM / V8 / CPython 运行时，导入时会被跳过。
+
+**播不了的时候看什么**：播放前先做地址预检，失败直接给出原因——源站 5xx、网关空页、403 防盗链、链接失效（404/410）、地址藏在加密脚本、或由页面 JS 运行时计算。播放器也会自动解析播放页（正文 m3u8、`player_aaaa`、`<video src>`、`<iframe>`、base64）并逐个验证候选。「另存响应内容」按钮可导出诊断文件。
+
+## 项目结构
+
+```
+player/
+├── src/            # 应用源码
+├── resources/      # 图标、app.rc（版本信息）
+├── packaging/      # macOS 打包脚本、Windows 安装配置
+├── thirdparty/     # 内置的 VLC C 头文件（LGPL-2.1+）
+├── vlc/            # LibVLC 3.0.21 win64 SDK/运行库（未纳入版本库，约 108MB）
+├── docs/           # BugFix-YYMMDD-00XX.md / R-YYMMDD-00XX.md / 截图
+├── .github/        # CI 工作流（windows.yml / macos.yml）
+├── CMakeLists.txt  # 构建配置 + 版本号
+├── player.pro      # qmake 工程（备选）
+├── installer.iss   # Inno Setup 脚本
+├── package.bat     # 一键 Windows 安装包
+└── build.bat / dist/
 ```
 
-| 字段 | 说明 |
-| :--- | :--- |
-| `type` | `0` = 苹果 CMS XML 接口，`1` = 苹果 CMS JSON 接口 |
-| `api` | 接口地址，如 `https://站点/api.php/provide/vod` |
-| `searchable` | 是否参与全源搜索，`1`/`0` |
-| `enabled` | 是否启用（界面上勾选第一列等价于此字段） |
-| `userAgent` / `referer` | 留空则用内置浏览器 UA 与接口 origin 作为 Referer |
-| `timeout` | 单次请求超时秒数，默认 15 |
+## 变更记录
 
-> 只支持可直接请求的苹果 CMS 接口。TVBox 生态里 `jar` / `js` / `py` 的脚本 Spider 需要 JVM / V8 / CPython 运行时，本播放器没有内置，导入时会被跳过。
-
-### 播不了的时候看什么
-
-「能搜到但播不动」基本都是地址这一层的问题，播放前会先做一次预检，失败会直接把原因弹出来：
-
-| 分类 | 提示 | 含义 | 怎么办 |
-| :--- | :--- | :--- | :--- |
-| **A** | 源站服务器出错（HTTP 5xx） | CDN / 回源故障，跟解析无关 | 等一会儿再试，或换线路 |
-| **A** | 返回的是一个内容极少的网页 | 网关错误页 | 换线路 / 换源 |
-| **B** | 源站拒绝访问（403） | 防盗链校验没过 | 源配置里 `referer` 填该站首页；或换线路 |
-| **B** | 播放地址已失效（404/410） | 链接过期 | 换线路 / 换源 |
-| **C** | 播放页里没找到可播地址 | 页面能打开，但地址藏在加密脚本里 | 换线路 |
-| **D** | 地址由网页 JS 运行时计算 | 这类需要浏览器内核，当前版本不支持 | 换线路 |
-| **E** | 连接超时 / 域名解析失败 / 证书校验失败 | 站点已挂、网络不通或证书过期 | 换源；证书问题会仍交给内核试一次 |
-
-**播放会自动尝试解析播放页**：直链播不了、返回的是网页时，会先在页面里找候选地址（正文里的 m3u8、`player_aaaa`、`<video src>`、`<iframe>` 一层、base64 编码串），逐个验证能不能真的出流，第一个通过的就直接播，OSD 会提示「已从播放页解析」。最多 8 次请求、15 秒。
-
-失败弹窗除了分类，还会列出状态码、Content-Type、内容长度、页面标题、是否含 iframe / JS 混淆，并带一个 **「另存响应内容」** 按钮（存到 `%TEMP%\lvsniff-*.html`）。碰到解析不了的站，把这个文件发出来就能定位。
-
-预检本身会试四种请求头组合（原样 → 去掉 Referer → 完全裸请求 → 用媒体域名当 Referer），命中能用的那组再交给 LibVLC；如果主清单能过但分片被挡，播放内核报错后还会自动换 header 重试两次。
-
----
-
-## 四、 编译与运行指南
-
-本项目已内置裁剪精简后的 **LibVLC 3.0.21 (win64) SDK 与运行库**（位于 `e:\02code\player\vlc\` 目录下），无需额外配置环境变量：
-
-> `vlc/` 是第三方二进制目录（约 108MB），**未纳入版本库**（见 `.gitignore`）。克隆到新机器后需先把该目录补齐（`sdk/include`、`sdk/lib`、`libvlc.dll`、`libvlccore.dll`、`plugins/`），否则 CMake 找不到 SDK。
-
-1. 使用 **Qt Creator** 打开 `e:\02code\player\CMakeLists.txt`（或 `e:\02code\player\player.pro`）。
-2. 选择 **Qt 6 (64-bit, MSVC 或 MinGW)** Kit 进行构建。
-3. CMake 会在编译完成后自动将 `libvlc.dll` 与 `libvlccore.dll` 拷贝至生成目录，同时程序启动时会自动定位 `vlc/plugins` 插件目录，直接点击运行即可。
-4. 一键打包 Windows 11 安装包：运行仓库根目录的 `package.bat`（需要 Inno Setup 6，脚本会依次找 `E:\tools\innosetup\ISCC.exe`、`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`，或用环境变量 `INNO_SETUP` 指定）。
-
-### CI 双端出包
-
-推一次 `main`（或在 Actions 页面手动 `workflow_dispatch`），两个工作流并行跑：
-
-- `windows.yml` → `LiteVlcPlayer-<版本>-Setup.exe` 与便携版 `LiteVlcPlayer-<版本>-win64.zip`（MinGW 编译 + `windeployqt` + LibVLC 运行时 + Inno Setup）；
-- `macos.yml` → `LiteVlcPlayer-<版本>-arm64.dmg`（见下一节）。
-
-两者都从 `CMakeLists.txt` 读版本号，所以两端的产物版本永远一致。只有改动 `src/`、`resources/`、`packaging/`、`thirdparty/`、`installer.iss`、`CMakeLists.txt` 才会触发，纯文档提交不跑 CI。
-
-### 发布（Release）
-
-先把重复的版本号统一（`CMakeLists.txt` 的 `project(... VERSION)`、`resources/app.rc` 的 `FILEVERSION`、`installer.iss` 的 `MyAppVersion`、`package.bat` 的 `APPVER`），然后打 tag 推送：
-
-```bash
-git tag v1.1.5
-git push origin v1.1.5
-```
-
-两个工作流在 tag 上各跑一遍，把各自的产物挂到**同一个 Release**：Windows 出 `LiteVlcPlayer-1.1.5-Setup.exe`（外加便携 zip），macOS 出 `LiteVlcPlayer-1.1.5-macos-arm64.dmg` 与 `LiteVlcPlayer-1.1.5-macos-x64.dmg`，不需要手动下载再上传。tag push 不受 `paths` 过滤影响，所以发版一定编得出来。只想验证编译、不发版时，推普通提交或用 `workflow_dispatch`，产物留在 Actions 的 Artifacts 里（保留 14 天）。
-
-### macOS（Apple Silicon）构建
-
-只支持 arm64，**不需要 Mac 真机**——CI 用 GitHub 的 `macos-15`（真 Apple Silicon）编译出 dmg：
-
-1. 把仓库推到 GitHub，`.github/workflows/macos.yml` 会自动跑；也可在 Actions 页面手动 `workflow_dispatch`。
-2. CI 流程：装 Qt 6.8.0 → 下载 `vlc-3.0.21-arm64.dmg` 并校验 → CMake（`-DCMAKE_OSX_ARCHITECTURES=arm64`）→ `macdeployqt` → `packaging/macos/bundle.sh` 塞入 VLC、修 install_name、arm64 自检、ad-hoc 签名、出 dmg → 上传 artifact。
-3. 本地在 Mac 上构建同理，只需把 VLC.app 放到 `vlc/`（或 `/Applications/VLC.app`）：
-   ```bash
-   cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
-   cmake --build build
-   "$(brew --prefix qt)/bin/macdeployqt" build/LiteVlcPlayer.app -always-overwrite
-   packaging/macos/bundle.sh build/LiteVlcPlayer.app vlc/VLC.app/Contents/MacOS 1.1.5
-   ```
-4. 产物是 ad-hoc 签名（无 Apple 开发者证书），用户首次打开需**右键 → 打开**，或 `xattr -dr com.apple.quarantine /Applications/LiteVlcPlayer.app`；dmg 内已附说明。
-5. macOS 上配置存于 `~/Library/Application Support/LiteVlcPlayer/`（不会写进 .app 包，否则破坏签名封印）。
-
-> VLC 的 C 头文件已随仓库提供（`thirdparty/vlc/include/vlc/`，LGPL-2.1+），CI 无需再拉源码包；macOS 的 `libvlc.dylib` 与 plugins 由 CI 从官方 arm64 dmg 里取。
-
----
-
-## 五、 变更记录
-
-约定：**Bug 修复**写入 `docs/BugFix-YYMMDD-00XX.md`，**新功能迭代**写入 `docs/R-YYMMDD-00XX.md`，每次改动单独提交一次 git，commit message 必须带上对应文档文件名。
+约定：**Bug 修复**写入 `docs/BugFix-YYMMDD-00XX.md`，**新功能迭代**写入 `docs/R-YYMMDD-00XX.md`；每次改动单独提交一次 git，commit message 带上对应文档文件名。完整历史见 `docs/` 各文件，重点摘录：
 
 | 编号 | 类型 | 摘要 |
 |---|---|---|
+| `R-261026-0002` | 新功能 | 整片缓存（离线下载）：按累计时间轴索引分片、地址过期续下、缓存列表、"命中本地就播"、单文件导出 |
+| `R-261026-0001` | 新功能 | 接入 TVBox 直播源（lives）：新增「直播」页（分组 / 筛选 / 整组换台），直播条目绕开 HLS 中继 |
+| `R-261022-0009` | 新功能 | 支持 Intel Mac：macOS CI 矩阵化（x86_64 + arm64），dmg 名带平台标签 |
+| `R-261022-0008` | 新功能 | 自动字幕 + 自动翻译（计划）：本地 ASR、llama.cpp 翻译、自绘字幕层 |
+| `R-261021-0005` | 新功能 | HLS 插播广告过滤：本地中继改写 m3u8，按 DISCONTINUITY 剔除广告 |
 | `R-261021-0001` | 新功能 | 在线片源：自定义源 / 搜索 / 在线播放闭环 |
-| `BugFix-261021-0001` | 缺陷修复 | 能搜到但播放不了：新增地址预检、错误提示与换头重试 |
-| `R-261021-0002` | 新功能 | 播放页嗅探与失败归因：HTML 分类 A~E、候选地址提取与复检、失败弹窗带诊断与另存响应 |
-| `R-261021-0003` | 新功能 | 在线剧集加入播放列表（本地/在线统一队列）+ 搜索窗改非模态 + 连播保护 |
-| `R-261021-0004` | 新功能 | 应用图标 + 手动检查更新（预留）+ Windows 11 安装包一键打包 + 配置目录回退 AppData |
-| `R-261022-0003` | 改进 | 更新源改为 GitHub Releases，移除内置自建服务器地址（含混淆代码与历史明文） |
-| `R-261021-0005` | 新功能 | HLS 插播广告过滤：本地中继改写 m3u8 清单，按 DISCONTINUITY 块时长剔除广告，分片直连不过中继 |
-| `BugFix-261021-0002` | 缺陷修复 | AES-128 加密源经中继拿不到有效媒体：EXT-X-KEY/MAP 相对 URI 绝对化，中继失败 302 回源站 |
-| `R-261022-0001` | 改进 | 订阅导入报错带统计（N 个源全是 type=3 Spider 等原因说明），混合配置导入成功时告知跳过数 |
-| `R-261022-0002` | 新功能 | macOS（Apple Silicon）构建支持：CMake Apple 分支、.app bundle + Info.plist + icns、平台分支（置顶/数据目录/硬解/字体）、GitHub Actions 一键出 dmg |
-| `R-261022-0004` | 改进 | 中英双语 README：英文作为主入口，中文版移至 `README.zh-CN.md`，两个文件头部都带 Eng / 中文 切换 |
-| `R-261022-0005` | 改进 | Windows 也进 CI：导入库入库、CMake 新增 SDK 探测分支、`windows.yml` 与 macOS 并排出 Setup.exe + 便携 zip |
-| `R-261022-0006` | 改进 | README 首段后补软件截图（主窗口 + 在线片源搜索） |
-| `R-261022-0007` | 改进 | 打 tag 自动发 Release：一次推送双端出包并挂到同一个 Release |
-| `R-261022-0008` | 新功能 | 自动字幕 + 自动翻译（计划）：本地 ASR（sherpa-onnx/SenseVoice 主，whisper.cpp 兜底）+ llama.cpp 翻译 + 自绘字幕层；音频按源类型分流（本地预转码 / 网络分块预取 / 直播 dump） |
-| `R-261022-0009` | 新功能 | 支持 Intel Mac：macOS CI 矩阵化，`macos-15-intel` 与 arm64 并列出 x86_64 包；dmg 名带完整平台标签（macos-arm64 / macos-x64），更新可按架构匹配资产 |
-| `R-261022-0010` | 缺陷修复 | v1.1.4 的 macOS 打包挂在架构自检（bash 3.2 runner 上 `EXPECT_ARCH` 被当作未定义，且报错尾巴被截断）：期望架构改为在使用点就地推导，新增 `ERR` trap 打印行号与命令，CI 改为外递真实错误行而非日志尾巴 |
-| `R-261026-0001` | 新功能 | 桌面端接入 TVBox 直播源（lives）：一份配置同时导入 sites + lives，新增「直播」页（分组 / 频道筛选 / 整组进列表换台），直播条目绕开 HLS 中继（中继缓存清单会让滑动窗口卡死）；`effectiveReferer` 改用 `authority()` 保住自定义端口 |
-| `BugFix-261026-0001` | 缺陷修复 | `v1.1.5` 的 Release 缺 `macos-arm64.dmg`：arm64 runner 上 `hdiutil create` 偶发失败（同一 commit 几分钟前在 main 上全绿）。dmg 生成改为重试 3 次、每次失败打 stderr、全败时输出 `df -h` |
-| `BugFix-261026-0002` | 缺陷修复 | 配置分发站的地址导入失败只报一句 JSON 解析错误。这类站点按 `User-Agent` 分流：桌面 Chrome UA 被 302 回首页（返回 HTML），只有 `okhttp`/`TVBox`/Android 客户端 UA 才拿到 JSON 配置。导入改为发客户端 UA，响应是网页时自动换浏览器 UA 重试一次，两次都不行则提示最终地址与可能原因 |
-| `BugFix-261026-0003` | 缺陷修复 | 有些订阅把配置藏在图片里（`Content-Type: image/*`，图片字节后跟 base64 尾巴），并用 `//` 注释掉停用的站点。`parseConfigJson` 改为按四级依次尝试：原样 JSON → 剥注释后的 JSON（`//` 与 `/* */`，不破坏字符串内的 URL，兼容 BOM）→ 整份 base64 → 任意 ≥256 字节的夹带 base64；每级都用「像不像配置」做闸门。TVBox 内置代理（`127.0.0.1:*/proxy`）在导入时直接跳过，不再留下永远失败的源 |
+
+## 贡献
+
+欢迎提交 Issue 与 Pull Request。涉及功能或行为变更时，请保持 `docs/` 同步：每次改动单独提交一次 git，commit message 带上对应的 `BugFix-YYMMDD-00XX.md` / `R-YYMMDD-00XX.md` 文件名。
+
+## 安全
+
+播放器不内置任何自建更新服务器，更新源仅指向 GitHub Releases，且不在后台自动下载。发现安全漏洞请通过 GitHub Issue 私下反馈，请勿公开讨论尚未修复的细节。
+
+## 许可证
+
+本仓库当前未提供 `LICENSE` 文件，许可证尚未声明；内置的 VLC C 头文件为 LGPL-2.1+。发布前请先确定并补充许可证。
+
+## 作者
+
+[yc7en](https://github.com/yc7en)

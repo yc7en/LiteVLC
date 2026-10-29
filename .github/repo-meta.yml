@@ -1,0 +1,14 @@
+# .github/repo-meta.yml — 由 github-repo Skill 维护，仓库元数据的唯一来源
+
+repo_name: LiteVLC
+title: LiteVLC Player
+description: Minimal Qt 6 + LibVLC desktop video player with TVBox-compatible online sources
+topics: [qt, cpp, libvlc, video-player, tvbox, desktop, windows, macos]
+project_type: other
+visibility: public
+license: not-declared
+github_user: yc7en
+default_branch: main
+language: cpp
+version: 1.1.6
+confirmed: false
